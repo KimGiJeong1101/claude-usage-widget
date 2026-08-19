@@ -1,0 +1,107 @@
+name: Release
+
+# Builds Windows + macOS standalone builds and publishes them to a GitHub
+# Release whenever a "v*" tag is pushed (e.g. v0.1.0). macOS is built on
+# GitHub's own macos-latest runner -- a real Mac -- so no local Mac is
+# needed. See claude-usage-widget-plan.md section 10 for the full plan.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[build]"
+
+      - name: Build with PyInstaller
+        run: >
+          pyinstaller --onefile --windowed --name ClaudeUsageWidget
+          --add-data "usage_widget/assets;usage_widget/assets"
+          run.py
+
+      - name: Zip the portable build
+        run: Compress-Archive -Path dist/ClaudeUsageWidget.exe -DestinationPath ClaudeUsageWidget-win.zip
+
+      - name: Determine version from tag
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Build MSI installer
+        # Pinned to WiX v5 (pre-6): v6+ added an Open Source Maintenance Fee
+        # EULA gate that isn't appropriate to auto-accept in CI for a
+        # company-adjacent project -- see claude-usage-widget-plan.md
+        # section 10.
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add WixToolset.UI.wixext/5.0.2
+          wix build installer/ClaudeUsageWidget.wxs -d SourceExe=dist/ClaudeUsageWidget.exe -d ProductVersion=${{ env.VERSION }} -arch x64 -ext WixToolset.UI.wixext -o ClaudeUsageWidget.msi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            ClaudeUsageWidget-win.zip
+            ClaudeUsageWidget.msi
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[build]"
+
+      - name: Build with PyInstaller
+        run: >
+          pyinstaller --onefile --windowed --name ClaudeUsageWidget
+          --add-data "usage_widget/assets:usage_widget/assets"
+          run.py
+
+      - name: Package as .dmg
+        run: |
+          hdiutil create -volname "ClaudeUsageWidget" \
+            -srcfolder dist/ClaudeUsageWidget.app \
+            -ov -format UDZO ClaudeUsageWidget-mac.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: ClaudeUsageWidget-mac.dmg
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-build
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ClaudeUsageWidget-win.zip
+            ClaudeUsageWidget.msi
+            ClaudeUsageWidget-mac.dmg

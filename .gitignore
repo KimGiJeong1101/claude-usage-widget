@@ -13,7 +13,12 @@ build/
 dist/
 *.spec
 *.egg-info/
+*.msi
+*.wixpdb
+*.zip
+*.dmg
+.wix/
 
 # personal/internal planning notes -- not meant for the public repo
 HANDOFF.md
-claude-usage-widget-plan_3.md
+claude-usage-widget-plan.md
