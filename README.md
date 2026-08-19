@@ -40,6 +40,19 @@ python -m usage_widget.main
 최초 실행 시 로그인 창이 뜨고, 로그인하면 트레이/메뉴바 아이콘으로 상주합니다.
 아이콘을 클릭하면 상세 사용량 팝업이, 우클릭하면 설정/종료 메뉴가 뜹니다.
 
+## 배포용 실행 파일 만들기 (Windows)
+
+Python/venv 설치 없이 동료들에게 나눠줄 수 있는 단일 `.exe`를 만들 수 있습니다.
+
+```bash
+pip install -e ".[build]"
+pyinstaller --onefile --windowed --name ClaudeUsageWidget run.py
+```
+
+`dist/ClaudeUsageWidget.exe`가 생성됩니다. Playwright 드라이버가 통째로
+포함되어 exe 용량이 큰 편입니다(수십 MB). macOS는 각자의 macOS 환경에서
+같은 명령으로 따로 빌드해야 합니다 (크로스 빌드 불가).
+
 ## 참고
 
 - 개인/팀 내부용으로 만든 도구이며, Anthropic의 공식 제품이 아닙니다.
