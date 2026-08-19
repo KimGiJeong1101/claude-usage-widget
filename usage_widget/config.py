@@ -5,12 +5,12 @@ from dataclasses import asdict, dataclass
 
 from usage_widget.paths import config_path
 
-DEFAULT_REFRESH_MINUTES = 15
+DEFAULT_REFRESH_SECONDS = 15 * 60
 
 
 @dataclass
 class Config:
-    refresh_minutes: int = DEFAULT_REFRESH_MINUTES
+    refresh_seconds: int = DEFAULT_REFRESH_SECONDS
 
     @classmethod
     def load(cls) -> "Config":

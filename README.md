@@ -38,7 +38,10 @@ python -m usage_widget.main
 ```
 
 최초 실행 시 로그인 창이 뜨고, 로그인하면 트레이/메뉴바 아이콘으로 상주합니다.
-아이콘을 클릭하면 상세 사용량 팝업이, 우클릭하면 설정/종료 메뉴가 뜹니다.
+
+- **좌클릭**: 세션(5시간)/주간 사용량 %와 리셋 시간이 담긴 상세 팝업이 클릭 위치 근처에 뜹니다 (마우스가 팝업 밖으로 나가면 자동으로 닫힘)
+- **우클릭**: 설정(갱신 주기, 초 단위) / 종료 메뉴
+- 트레이 아이콘 자체는 세션(5시간) 사용량만 원형 게이지로 표시합니다 (주간 수치는 팝업에서 확인)
 
 ## 배포용 실행 파일 만들기 (Windows)
 
@@ -46,7 +49,7 @@ Python/venv 설치 없이 동료들에게 나눠줄 수 있는 단일 `.exe`를 
 
 ```bash
 pip install -e ".[build]"
-pyinstaller --onefile --windowed --name ClaudeUsageWidget run.py
+pyinstaller --onefile --windowed --name ClaudeUsageWidget --add-data "usage_widget/assets;usage_widget/assets" run.py
 ```
 
 `dist/ClaudeUsageWidget.exe`가 생성됩니다. Playwright 드라이버가 통째로
@@ -57,3 +60,5 @@ pyinstaller --onefile --windowed --name ClaudeUsageWidget run.py
 
 - 개인/팀 내부용으로 만든 도구이며, Anthropic의 공식 제품이 아닙니다.
 - 자기 자신의 claude.ai 계정으로만 사용하도록 설계되어 있습니다.
+- UI 폰트로 [Pretendard](https://github.com/orioncactus/pretendard)(SIL OFL 1.1 라이선스, `usage_widget/assets/fonts/LICENSE` 참고)를 번들로 포함합니다.
+  Windows에서는 설치 없이 프로세스 단위로 폰트를 등록해서 사용하고, macOS/Linux에서는 아직 이 방식이 구현되어 있지 않아 OS 기본 폰트로 표시됩니다.

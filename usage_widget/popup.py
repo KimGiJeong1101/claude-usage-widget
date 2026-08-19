@@ -8,23 +8,27 @@ from tkinter import ttk
 
 import sv_ttk
 
+from usage_widget import fonts
 from usage_widget.config import Config
 from usage_widget.fetcher import UsageData
 from usage_widget.tray_icon import color_for_percent
 
 _MUTED_TEXT = "#8a8a8a"
-_TROUGH_COLOR = "#e0e0e0"
-_BAR_HEIGHT = 10
-_BAR_WIDTH = 240
-_BAR_RADIUS = 5
+_TROUGH_COLOR = "#e4e4e4"
+_BAR_HEIGHT = 12
+_BAR_WIDTH = 280
+_BAR_RADIUS = 6
 
 _PANEL_BG = "#ffffff"
 _PANEL_BORDER = "#d8d8d8"
+_DIVIDER = "#ececec"
 _PANEL_RADIUS = 16
 _KEY_COLOR = "#0a1a2a"  # arbitrary color used as the Windows "transparent" key
-_FLYOUT_WIDTH = 300
-_FLYOUT_HEIGHT = 232
-_CURSOR_GAP = 12  # gap between the cursor and the flyout edge
+_FLYOUT_WIDTH = 320
+_FLYOUT_HEIGHT = 260
+_SETTINGS_WIDTH = 280
+_SETTINGS_HEIGHT = 190
+_CURSOR_GAP = 24  # how far inside the flyout's near edge the cursor lands
 
 _IS_WINDOWS = sys.platform == "win32"
 
@@ -42,6 +46,23 @@ def _get_hidden_root() -> tk.Tk:
         _hidden_root = tk.Tk()
         _hidden_root.withdraw()
     return _hidden_root
+
+
+def get_gui_root() -> tk.Tk:
+    """Public accessor so main.py can create this root up front on its own
+    dedicated GUI thread, and marshal pystray menu callbacks onto that
+    thread via root.after(0, ...) instead of calling tkinter directly from
+    pystray's own callback thread. pystray's Win32 backend invokes menu
+    callbacks from a low-level native message-loop context, not a normal
+    Python thread -- calling a long blocking tkinter operation (wait_window)
+    directly from there crashed the process ("PyEval_RestoreThread: ... but
+    the GIL is released")."""
+    return _get_hidden_root()
+
+
+def _font(size: int, bold: bool = False) -> tuple:
+    family = fonts.ensure_loaded()
+    return (family, size, "bold" if bold else "normal")
 
 
 def _rgb_to_hex(rgb: tuple) -> str:
@@ -85,6 +106,10 @@ def _progress_bar(parent: tk.Widget, percent: int) -> tk.Canvas:
     return canvas
 
 
+def _divider(parent: tk.Widget) -> tk.Frame:
+    return tk.Frame(parent, height=1, bg=_DIVIDER)
+
+
 def _format_remaining(reset_at: datetime) -> str:
     delta = reset_at - datetime.now()
     total_minutes = max(int(delta.total_seconds()) // 60, 0)
@@ -96,18 +121,21 @@ def _format_remaining(reset_at: datetime) -> str:
 
 
 def _add_usage_row(parent: tk.Widget, row: int, title: str, percent: int, reset_at: datetime) -> None:
-    tk.Label(parent, text=title, font=("", 11, "bold"), bg=_PANEL_BG).grid(
+    percent_color = _rgb_to_hex(color_for_percent(percent))
+
+    tk.Label(parent, text=title, font=_font(12, bold=True), bg=_PANEL_BG).grid(
         column=0, row=row, sticky="w"
     )
-    tk.Label(parent, text=f"{percent}%", font=("", 11, "bold"), bg=_PANEL_BG).grid(
+    tk.Label(parent, text=f"{percent}%", font=_font(16, bold=True), bg=_PANEL_BG, fg=percent_color).grid(
         column=1, row=row, sticky="e"
     )
     _progress_bar(parent, percent).grid(
-        column=0, row=row + 1, columnspan=2, sticky="ew", pady=(8, 4)
+        column=0, row=row + 1, columnspan=2, sticky="ew", pady=(10, 6)
     )
     tk.Label(
         parent,
         text=f"리셋까지 {_format_remaining(reset_at)}",
+        font=_font(10),
         fg=_MUTED_TEXT,
         bg=_PANEL_BG,
     ).grid(column=0, row=row + 2, columnspan=2, sticky="w")
@@ -156,26 +184,40 @@ def _position_near_cursor(window: tk.Toplevel, width: int, height: int) -> None:
     cursor_x, cursor_y = window.winfo_pointerx(), window.winfo_pointery()
     screen_w, screen_h = window.winfo_screenwidth(), window.winfo_screenheight()
 
+    # The cursor must land INSIDE the window the moment it opens -- it
+    # auto-closes once the pointer leaves it, so if the window were placed
+    # just outside the cursor (a gap instead of an overlap) it would look
+    # like it vanishes instantly unless the mouse is moved there right away.
     if cursor_y > screen_h / 2:
-        y = cursor_y - height - _CURSOR_GAP
+        y = cursor_y - height + _CURSOR_GAP
     else:
-        y = cursor_y + _CURSOR_GAP
+        y = cursor_y - _CURSOR_GAP
 
     if cursor_x > screen_w / 2:
-        x = cursor_x - width + 24
+        x = cursor_x - width + _CURSOR_GAP
     else:
-        x = cursor_x - 24
+        x = cursor_x - _CURSOR_GAP
 
     x = max(0, min(x, screen_w - width))
     y = max(0, min(y, screen_h - height))
     window.geometry(f"{width}x{height}+{x}+{y}")
 
 
-def _new_flyout(title: str, width: int, height: int) -> tuple:
-    """A borderless, rounded, always-on-top flyout anchored above the tray
-    area at the bottom-right of the screen -- similar to Windows' own
+def _position_centered(window: tk.Toplevel, width: int, height: int) -> None:
+    screen_w, screen_h = window.winfo_screenwidth(), window.winfo_screenheight()
+    x = (screen_w - width) // 2
+    y = (screen_h - height) // 2
+    window.geometry(f"{width}x{height}+{x}+{y}")
+
+
+def _new_panel(
+    title: str, width: int, height: int, *, position: str = "cursor", close_on_leave: bool = False
+) -> tuple:
+    """A borderless, rounded, always-on-top panel -- similar to Windows' own
     volume/network flyouts -- rather than a plain dialog with a native
-    (OS-drawn) title bar. Closes automatically once the pointer leaves it."""
+    (OS-drawn) title bar. Used for both the usage flyout (anchored near the
+    click, auto-closes on pointer leave) and the settings window (centered,
+    stays open so it's usable while filling in the form)."""
     window = tk.Toplevel(_get_hidden_root())
     window.overrideredirect(True)
     window.attributes("-topmost", True)
@@ -199,29 +241,35 @@ def _new_flyout(title: str, width: int, height: int) -> tuple:
     canvas.create_window(2, 2, window=panel, anchor="nw", width=width - 4, height=height - 4)
 
     header = tk.Frame(panel, bg=_PANEL_BG)
-    header.grid(column=0, row=0, sticky="ew", padx=18, pady=(14, 6))
+    header.grid(column=0, row=0, sticky="ew", padx=20, pady=(16, 4))
     header.grid_columnconfigure(0, weight=1)
-    tk.Label(header, text=title, font=("", 11, "bold"), bg=_PANEL_BG).grid(column=0, row=0, sticky="w")
-    close_btn = tk.Label(header, text="✕", font=("", 10), bg=_PANEL_BG, fg=_MUTED_TEXT, cursor="hand2")
+    tk.Label(header, text=title, font=_font(13, bold=True), bg=_PANEL_BG).grid(column=0, row=0, sticky="w")
+    close_btn = tk.Label(
+        header, text="✕", font=_font(11), bg=_PANEL_BG, fg=_MUTED_TEXT, cursor="hand2", padx=6, pady=4
+    )
     close_btn.grid(column=1, row=0, sticky="e")
     close_btn.bind("<Button-1>", lambda e: window.destroy())
     _make_draggable(header, window)
 
     body = tk.Frame(panel, bg=_PANEL_BG)
-    body.grid(column=0, row=1, sticky="nsew", padx=18)
+    body.grid(column=0, row=1, sticky="nsew", padx=20, pady=(10, 16))
 
-    _position_near_cursor(window, width, height)
+    if position == "cursor":
+        _position_near_cursor(window, width, height)
+    else:
+        _position_centered(window, width, height)
 
-    _close_when_pointer_leaves(window)
+    if close_on_leave:
+        _close_when_pointer_leaves(window)
     window.after(50, lambda: (window.focus_force(), window.lift()))
     return window, body
 
 
 def show_usage_popup(usage: UsageData) -> None:
-    window, body = _new_flyout("Claude 사용량", _FLYOUT_WIDTH, _FLYOUT_HEIGHT)
+    window, body = _new_panel("Claude 사용량", _FLYOUT_WIDTH, _FLYOUT_HEIGHT, position="cursor", close_on_leave=True)
 
     _add_usage_row(body, 0, "세션 (5시간)", usage.session_percent, usage.session_reset_at)
-    tk.Frame(body, height=18, bg=_PANEL_BG).grid(row=3, column=0)
+    _divider(body).grid(row=3, column=0, columnspan=2, sticky="ew", pady=16)
     _add_usage_row(body, 4, "주간", usage.week_percent, usage.week_reset_at)
 
     window.wait_window()
@@ -229,24 +277,32 @@ def show_usage_popup(usage: UsageData) -> None:
 
 def show_settings_popup() -> None:
     config = Config.load()
-    window = tk.Toplevel(_get_hidden_root())
-    window.title("설정")
-    window.resizable(False, False)
     sv_ttk.set_theme("light")
-    frame = ttk.Frame(window, padding=20)
-    frame.grid()
+    window, body = _new_panel("설정", _SETTINGS_WIDTH, _SETTINGS_HEIGHT, position="center")
 
-    ttk.Label(frame, text="갱신 주기 (분)").grid(column=0, row=0, sticky="w")
-    interval_var = tk.IntVar(value=config.refresh_minutes)
-    ttk.Entry(frame, textvariable=interval_var, width=6).grid(column=1, row=0, padx=(12, 0))
+    tk.Label(body, text="갱신 주기", font=_font(12, bold=True), bg=_PANEL_BG).grid(
+        column=0, row=0, columnspan=2, sticky="w"
+    )
+
+    entry_row = tk.Frame(body, bg=_PANEL_BG)
+    entry_row.grid(column=0, row=1, columnspan=2, sticky="w", pady=(10, 4))
+    interval_var = tk.IntVar(value=config.refresh_seconds)
+    ttk.Entry(entry_row, textvariable=interval_var, width=8, font=_font(11)).grid(column=0, row=0)
+    tk.Label(entry_row, text="초", font=_font(11), bg=_PANEL_BG).grid(column=1, row=0, padx=(8, 0))
+
+    tk.Label(
+        body, text="예: 900초 = 15분", font=_font(9), fg=_MUTED_TEXT, bg=_PANEL_BG
+    ).grid(column=0, row=2, columnspan=2, sticky="w")
 
     def on_save():
-        config.refresh_minutes = interval_var.get()
+        config.refresh_seconds = interval_var.get()
         config.save()
         # TODO: re-register the OS scheduler task (schtasks / launchd)
         # with the new interval -- see plan doc section 5.
         window.destroy()
 
-    ttk.Button(frame, text="저장", command=on_save).grid(column=0, row=1, columnspan=2, pady=(16, 0))
+    ttk.Button(body, text="저장", command=on_save).grid(
+        column=0, row=3, columnspan=2, sticky="ew", pady=(16, 0)
+    )
 
     window.wait_window()
