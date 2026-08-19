@@ -87,14 +87,8 @@ def _rounded_rect(canvas: tk.Canvas, x0: float, y0: float, x1: float, y1: float,
     canvas.create_polygon(points, smooth=True, **kwargs)
 
 
-def _progress_bar(parent: tk.Widget, percent: int) -> tk.Canvas:
-    """Custom-drawn rounded progress bar, colored by severity. ttk's
-    built-in Progressbar renders via theme-specific images/styling that
-    doesn't reliably accept custom fill colors, so this draws directly on
-    a Canvas instead."""
-    canvas = tk.Canvas(
-        parent, width=_BAR_WIDTH, height=_BAR_HEIGHT, highlightthickness=0, bg=_PANEL_BG
-    )
+def _draw_progress_fill(canvas: tk.Canvas, percent: int) -> None:
+    canvas.delete("all")
     _rounded_rect(canvas, 0, 0, _BAR_WIDTH, _BAR_HEIGHT, _BAR_RADIUS, fill=_TROUGH_COLOR, outline="")
     clamped = min(max(percent, 0), 100)
     if clamped > 0:
@@ -103,6 +97,17 @@ def _progress_bar(parent: tk.Widget, percent: int) -> tk.Canvas:
             canvas, 0, 0, fill_width, _BAR_HEIGHT, _BAR_RADIUS,
             fill=_rgb_to_hex(color_for_percent(percent)), outline="",
         )
+
+
+def _progress_bar(parent: tk.Widget, percent: int) -> tk.Canvas:
+    """Custom-drawn rounded progress bar, colored by severity. ttk's
+    built-in Progressbar renders via theme-specific images/styling that
+    doesn't reliably accept custom fill colors, so this draws directly on
+    a Canvas instead."""
+    canvas = tk.Canvas(
+        parent, width=_BAR_WIDTH, height=_BAR_HEIGHT, highlightthickness=0, bg=_PANEL_BG
+    )
+    _draw_progress_fill(canvas, percent)
     return canvas
 
 
@@ -120,25 +125,32 @@ def _format_remaining(reset_at: datetime) -> str:
     return f"{hours}시간 {minutes}분 후"
 
 
-def _add_usage_row(parent: tk.Widget, row: int, title: str, percent: int, reset_at: datetime) -> None:
+def _add_usage_row(parent: tk.Widget, row: int, title: str, percent: int, reset_at: datetime) -> dict:
     percent_color = _rgb_to_hex(color_for_percent(percent))
 
     tk.Label(parent, text=title, font=_font(12, bold=True), bg=_PANEL_BG).grid(
         column=0, row=row, sticky="w"
     )
-    tk.Label(parent, text=f"{percent}%", font=_font(16, bold=True), bg=_PANEL_BG, fg=percent_color).grid(
-        column=1, row=row, sticky="e"
-    )
-    _progress_bar(parent, percent).grid(
-        column=0, row=row + 1, columnspan=2, sticky="ew", pady=(10, 6)
-    )
-    tk.Label(
+    percent_label = tk.Label(parent, text=f"{percent}%", font=_font(16, bold=True), bg=_PANEL_BG, fg=percent_color)
+    percent_label.grid(column=1, row=row, sticky="e")
+    bar_canvas = _progress_bar(parent, percent)
+    bar_canvas.grid(column=0, row=row + 1, columnspan=2, sticky="ew", pady=(10, 6))
+    reset_label = tk.Label(
         parent,
         text=f"리셋까지 {_format_remaining(reset_at)}",
         font=_font(10),
         fg=_MUTED_TEXT,
         bg=_PANEL_BG,
-    ).grid(column=0, row=row + 2, columnspan=2, sticky="w")
+    )
+    reset_label.grid(column=0, row=row + 2, columnspan=2, sticky="w")
+
+    return {"percent_label": percent_label, "bar_canvas": bar_canvas, "reset_label": reset_label}
+
+
+def _update_usage_row(refs: dict, percent: int, reset_at: datetime) -> None:
+    refs["percent_label"].config(text=f"{percent}%", fg=_rgb_to_hex(color_for_percent(percent)))
+    _draw_progress_fill(refs["bar_canvas"], percent)
+    refs["reset_label"].config(text=f"리셋까지 {_format_remaining(reset_at)}")
 
 
 def _make_draggable(handle: tk.Widget, window: tk.Toplevel) -> None:
@@ -247,7 +259,7 @@ def _new_panel(
     close_btn = tk.Label(
         header, text="✕", font=_font(11), bg=_PANEL_BG, fg=_MUTED_TEXT, cursor="hand2", padx=6, pady=4
     )
-    close_btn.grid(column=1, row=0, sticky="e")
+    close_btn.grid(column=2, row=0, sticky="e")
     close_btn.bind("<Button-1>", lambda e: window.destroy())
     _make_draggable(header, window)
 
@@ -262,15 +274,49 @@ def _new_panel(
     if close_on_leave:
         _close_when_pointer_leaves(window)
     window.after(50, lambda: (window.focus_force(), window.lift()))
-    return window, body
+    return window, header, body
 
 
-def show_usage_popup(usage: UsageData) -> None:
-    window, body = _new_panel("Claude 사용량", _FLYOUT_WIDTH, _FLYOUT_HEIGHT, position="cursor", close_on_leave=True)
+def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
+    """on_refresh, if given, is called as on_refresh(on_done) when the
+    refresh button is clicked -- it's expected to fetch fresh data in the
+    background and call on_done(new_usage) from the GUI thread once ready
+    (see main.py's _manual_refresh), so this never blocks the window."""
+    window, header, body = _new_panel(
+        "Claude 사용량", _FLYOUT_WIDTH, _FLYOUT_HEIGHT, position="cursor", close_on_leave=True
+    )
 
-    _add_usage_row(body, 0, "세션 (5시간)", usage.session_percent, usage.session_reset_at)
+    session_refs = _add_usage_row(body, 0, "세션 (5시간)", usage.session_percent, usage.session_reset_at)
     _divider(body).grid(row=3, column=0, columnspan=2, sticky="ew", pady=16)
-    _add_usage_row(body, 4, "주간", usage.week_percent, usage.week_reset_at)
+    week_refs = _add_usage_row(body, 4, "주간", usage.week_percent, usage.week_reset_at)
+
+    if on_refresh is not None:
+        refresh_btn = tk.Label(
+            header, text="⟳", font=_font(13), bg=_PANEL_BG, fg=_MUTED_TEXT, cursor="hand2", padx=6, pady=4
+        )
+        refresh_btn.grid(column=1, row=0, sticky="e")
+
+        def on_done(new_usage: UsageData | None) -> None:
+            if not window.winfo_exists():
+                return
+            if new_usage is None:
+                # briefly flash red so a failed refresh doesn't look like
+                # nothing happened, then settle back to the normal look
+                refresh_btn.config(fg="#e04b4b", cursor="hand2")
+                window.after(
+                    1500,
+                    lambda: refresh_btn.config(fg=_MUTED_TEXT) if window.winfo_exists() else None,
+                )
+                return
+            _update_usage_row(session_refs, new_usage.session_percent, new_usage.session_reset_at)
+            _update_usage_row(week_refs, new_usage.week_percent, new_usage.week_reset_at)
+            refresh_btn.config(fg=_MUTED_TEXT, cursor="hand2")
+
+        def do_refresh(event=None):
+            refresh_btn.config(fg="#c0c0c0", cursor="")
+            on_refresh(on_done)
+
+        refresh_btn.bind("<Button-1>", do_refresh)
 
     window.wait_window()
 
@@ -278,7 +324,7 @@ def show_usage_popup(usage: UsageData) -> None:
 def show_settings_popup() -> None:
     config = Config.load()
     sv_ttk.set_theme("light")
-    window, body = _new_panel("설정", _SETTINGS_WIDTH, _SETTINGS_HEIGHT, position="center")
+    window, _header, body = _new_panel("설정", _SETTINGS_WIDTH, _SETTINGS_HEIGHT, position="center")
 
     tk.Label(body, text="갱신 주기", font=_font(12, bold=True), bg=_PANEL_BG).grid(
         column=0, row=0, columnspan=2, sticky="w"

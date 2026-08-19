@@ -37,6 +37,9 @@ def _parse_reset_at(iso_string: str) -> datetime:
 
 
 def fetch_usage() -> UsageData:
+    if not session_state_path().exists():
+        raise SessionExpiredError("no saved session")
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, channel="chrome")
         try:
