@@ -9,6 +9,7 @@ dependencies = [
     "playwright>=1.40",
     "httpx>=0.27",
     "platformdirs>=4.0",
+    "sv-ttk>=2.6",
 ]
 
 [project.optional-dependencies]

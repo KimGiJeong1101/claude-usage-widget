@@ -24,7 +24,7 @@ def _refresh_loop(icon: pystray.Icon) -> None:
         except SessionExpiredError:
             login_and_save_session()
             _latest_usage = fetch_usage()
-        icon.icon = build_icon_image(max(_latest_usage.session_percent, _latest_usage.week_percent))
+        icon.icon = build_icon_image(_latest_usage.session_percent, _latest_usage.week_percent)
         time.sleep(config.refresh_minutes * 60)
 
 
@@ -58,7 +58,7 @@ def run() -> None:
     )
     icon = pystray.Icon(
         "claude-usage-widget",
-        build_icon_image(_latest_usage.session_percent),
+        build_icon_image(_latest_usage.session_percent, _latest_usage.week_percent),
         "Claude 사용량",
         menu,
     )
