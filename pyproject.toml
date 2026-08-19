@@ -19,5 +19,8 @@ build = ["pyinstaller>=6.0"]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+include = ["usage_widget*"]
+
 [tool.setuptools.package-data]
 usage_widget = ["assets/fonts/*.otf", "assets/fonts/LICENSE"]
