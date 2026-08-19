@@ -3,6 +3,19 @@
 claude.ai의 **Settings &gt; Usage** 화면에 나오는 세션(5시간)/주간 사용량 %와 리셋 시간을,
 트레이(Windows) / 메뉴바(macOS) 아이콘으로 항상 보여주는 데스크톱 위젯입니다.
 
+## 다운로드
+
+Python 설치 없이 바로 쓸 수 있는 빌드입니다 (아래 링크는 항상 최신 릴리즈를 가리킵니다).
+
+- [Windows 설치 (.msi)](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget.msi)
+- [Windows 포터블 (.zip, 설치 없이 실행)](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-win.zip)
+- [macOS (.dmg)](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.dmg)
+
+코드 서명이 안 된 빌드라 실행 시 경고가 뜰 수 있습니다:
+
+- **Windows**: SmartScreen이 "알 수 없는 게시자"라고 뜨면 → **추가 정보** → **실행**
+- **macOS**: "확인되지 않은 개발자" 경고가 뜨면 → 파일 우클릭 → **열기**
+
 ## 동작 방식
 
 - claude.ai는 이 사용량 정보를 가져올 수 있는 공식 공개 API를 제공하지 않습니다.
