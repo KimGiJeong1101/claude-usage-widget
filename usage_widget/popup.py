@@ -1,15 +1,16 @@
-"""Flyout shown when the tray icon is clicked, and the settings window
-reachable from the right-click menu."""
+"""Flyout shown when the tray icon is clicked, and the settings/account
+windows reachable from the right-click menu."""
 
 import math
 import sys
 import tkinter as tk
 from datetime import datetime
+from pathlib import Path
 from tkinter import ttk
 from typing import Optional
 
 import sv_ttk
-from PIL import Image, ImageDraw, ImageTk
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 from usage_widget import autostart, fonts
 from usage_widget.config import Config
@@ -17,25 +18,70 @@ from usage_widget.fetcher import UsageData
 from usage_widget.tray_icon import DEFAULT_STYLE, STYLE_LABELS, color_for_percent
 
 _MUTED_TEXT = "#8a8a8a"
-_TROUGH_COLOR = "#e4e4e4"
-_BAR_HEIGHT = 12
-_BAR_WIDTH = 280
-_BAR_RADIUS = 6
+_TEXT_PRIMARY = "#1c1e21"
+_ACCENT = "#3b82f6"
+_CARD_BORDER = "#e5e6e9"
 
 _PANEL_BG = "#ffffff"
-_PANEL_BORDER = "#d8d8d8"
-_DIVIDER = "#ececec"
-_PANEL_RADIUS = 16
+_PANEL_BORDER = "#e2e2e2"
+_PANEL_RADIUS = 18
 _KEY_COLOR = "#0a1a2a"  # arbitrary color used as the Windows "transparent" key
-_FLYOUT_WIDTH = 320
-_FLYOUT_HEIGHT = 260
-_SETTINGS_WIDTH = 280
-_SETTINGS_HEIGHT = 350
+_FLYOUT_WIDTH = 344
+_FLYOUT_HEIGHT = 372
+_SETTINGS_WIDTH = 300
+_SETTINGS_HEIGHT = 430
+_ACCOUNT_WIDTH = 280
+_ACCOUNT_HEIGHT = 280
 _CURSOR_GAP = 24  # how far inside the flyout's near edge the cursor lands
+
+_ASSET_FONT_DIR = Path(__file__).parent / "assets" / "fonts"
+
+
+def _pil_font(name: str, size: int) -> ImageFont.FreeTypeFont:
+    """Loads a bundled font file directly (unlike usage_widget.fonts, which
+    registers it with Windows for *tkinter* widgets to reference by name).
+    Pillow reads the file itself and needs no OS registration, so this
+    renders identically on every platform -- used for baking the percent
+    number into the gradient ring image below, since it has to be part of
+    that single bitmap for the text to land exactly centered in the ring."""
+    return ImageFont.truetype(str(_ASSET_FONT_DIR / f"Pretendard-{name}.otf"), size)
+
+
+def _render_ring_with_percent(percent: int, size: int = 100) -> ImageTk.PhotoImage:
+    """A donut gauge in a flat severity color (green/yellow/red, same
+    thresholds as the tray icon) with the percent number baked into its
+    exact center."""
+    clamped = min(max(percent, 0), 100)
+    color = color_for_percent(clamped)
+    thickness = max(int(size * 0.13), 8)
+
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    cx = cy = size / 2
+    r_outer = size / 2 - 3
+    r_inner = r_outer - thickness
+    bbox = [cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer]
+
+    draw_full = ImageDraw.Draw(img)
+    draw_full.ellipse(bbox, fill=(231, 233, 236, 255))
+
+    sweep = 360 * clamped / 100
+    if sweep > 0:
+        draw_full.pieslice(bbox, start=-90, end=-90 + sweep, fill=color + (255,))
+    draw_full.ellipse([cx - r_inner, cy - r_inner, cx + r_inner, cy + r_inner], fill=(0, 0, 0, 0))
+
+    draw = ImageDraw.Draw(img)
+    text = f"{clamped}%"
+    text_font = _pil_font("Bold", int(size * 0.22))
+    bbox = draw.textbbox((0, 0), text, font=text_font)
+    text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text((cx - text_w / 2, cy - text_h / 2 - bbox[1]), text, font=text_font, fill=_TEXT_PRIMARY)
+
+    return ImageTk.PhotoImage(img)
 
 _IS_WINDOWS = sys.platform == "win32"
 
 _hidden_root = None
+_ttk_theme_applied = False
 
 
 def _get_hidden_root() -> tk.Tk:
@@ -63,13 +109,31 @@ def get_gui_root() -> tk.Tk:
     return _get_hidden_root()
 
 
-def _font(size: int, bold: bool = False) -> tuple:
-    family = fonts.ensure_loaded()
-    return (family, size, "bold" if bold else "normal")
+def _ensure_ttk_theme() -> None:
+    """sv_ttk's theme is process-global (not per-window), but every popup
+    that uses any ttk widget needs it applied at least once, or whichever
+    one happens to open first gets the native (plain) ttk look instead."""
+    global _ttk_theme_applied
+    if not _ttk_theme_applied:
+        sv_ttk.set_theme("light")
+        _ttk_theme_applied = True
 
 
-def _rgb_to_hex(rgb: tuple) -> str:
-    return "#%02x%02x%02x" % rgb
+# Windows registers each weight of a multi-file font family (see
+# usage_widget/fonts.py) as its own family name -- "Pretendard",
+# "Pretendard Medium", "Pretendard SemiBold" -- rather than one family
+# selectable by a numeric weight, which is all tkinter's simple
+# (family, size, "bold"/"normal") font spec can address otherwise.
+_FONT_WEIGHT_SUFFIX = {"regular": "", "medium": " Medium", "semibold": " SemiBold", "bold": ""}
+
+
+def _font(size: int, weight: str = "regular") -> tuple:
+    base = fonts.ensure_loaded()
+    if not base:
+        return ("", size, "bold" if weight == "bold" else "normal")
+    suffix = _FONT_WEIGHT_SUFFIX.get(weight, "")
+    tk_weight = "bold" if weight == "bold" else "normal"
+    return (f"{base}{suffix}", size, tk_weight)
 
 
 def _rounded_rect(canvas: tk.Canvas, x0: float, y0: float, x1: float, y1: float, radius: float, **kwargs) -> None:
@@ -90,36 +154,20 @@ def _rounded_rect(canvas: tk.Canvas, x0: float, y0: float, x1: float, y1: float,
     canvas.create_polygon(points, smooth=True, **kwargs)
 
 
-def _draw_progress_fill(canvas: tk.Canvas, percent: int) -> None:
-    canvas.delete("all")
-    _rounded_rect(canvas, 0, 0, _BAR_WIDTH, _BAR_HEIGHT, _BAR_RADIUS, fill=_TROUGH_COLOR, outline="")
-    clamped = min(max(percent, 0), 100)
-    if clamped > 0:
-        fill_width = max(_BAR_WIDTH * clamped / 100, _BAR_RADIUS * 2)
-        _rounded_rect(
-            canvas, 0, 0, fill_width, _BAR_HEIGHT, _BAR_RADIUS,
-            fill=_rgb_to_hex(color_for_percent(percent)), outline="",
-        )
-
-
-def _progress_bar(parent: tk.Widget, percent: int) -> tk.Canvas:
-    """Custom-drawn rounded progress bar, colored by severity. ttk's
-    built-in Progressbar renders via theme-specific images/styling that
-    doesn't reliably accept custom fill colors, so this draws directly on
-    a Canvas instead."""
-    canvas = tk.Canvas(
-        parent, width=_BAR_WIDTH, height=_BAR_HEIGHT, highlightthickness=0, bg=_PANEL_BG
-    )
-    _draw_progress_fill(canvas, percent)
-    return canvas
-
-
-def _divider(parent: tk.Widget) -> tk.Frame:
-    return tk.Frame(parent, height=1, bg=_DIVIDER)
+def _card_frame(parent: tk.Widget, width: int, height: int, radius: int = 18) -> tuple:
+    """A rounded, bordered card (each usage row gets one) drawn the same
+    way as the outer window panel -- a Canvas background plus an embedded
+    Frame for the actual widget content."""
+    canvas = tk.Canvas(parent, width=width, height=height, highlightthickness=0, bg=_PANEL_BG)
+    _rounded_rect(canvas, 0, 0, width, height, radius, fill=_PANEL_BG, outline=_CARD_BORDER)
+    content = tk.Frame(canvas, bg=_PANEL_BG)
+    canvas.create_window(2, 2, window=content, anchor="nw", width=width - 4, height=height - 4)
+    return canvas, content
 
 
 _ICON_SIZE = 22
 _ICON_RENDER_SCALE = 4  # draw big, downsample -- much smoother edges than drawing at 1x
+_ICON_GAP = 6  # breathing room between adjacent header icons
 
 
 def _render_close_icon(color: str) -> ImageTk.PhotoImage:
@@ -176,12 +224,46 @@ def _render_pin_icon(color: str, filled: bool) -> ImageTk.PhotoImage:
     return ImageTk.PhotoImage(img.resize((_ICON_SIZE, _ICON_SIZE), Image.LANCZOS))
 
 
+def _render_settings_icon(color: str) -> ImageTk.PhotoImage:
+    """Three horizontal sliders -- a common "settings" pictogram, and much
+    easier to draw accurately with plain lines/circles than a gear."""
+    size = _ICON_SIZE * _ICON_RENDER_SCALE
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    w = max(2, int(size * 0.08))
+    knob_r = size * 0.08
+    x0, x1 = size * 0.12, size * 0.88
+    knob_x = [size * 0.35, size * 0.65, size * 0.45]
+    for i, ky in enumerate([size * 0.22, size * 0.5, size * 0.78]):
+        draw.line([x0, ky, x1, ky], fill=color, width=w)
+        kx = knob_x[i]
+        draw.ellipse([kx - knob_r, ky - knob_r, kx + knob_r, ky + knob_r], fill=color)
+    return ImageTk.PhotoImage(img.resize((_ICON_SIZE, _ICON_SIZE), Image.LANCZOS))
+
+
+def _render_person_icon(color: str) -> ImageTk.PhotoImage:
+    size = _ICON_SIZE * _ICON_RENDER_SCALE
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    cx = size / 2
+    head_r = size * 0.19
+    head_cy = size * 0.32
+    draw.ellipse([cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r], fill=color)
+    shoulder_r = size * 0.34
+    shoulder_cy = size * 1.02
+    draw.pieslice(
+        [cx - shoulder_r, shoulder_cy - shoulder_r, cx + shoulder_r, shoulder_cy + shoulder_r],
+        start=180, end=360, fill=color,
+    )
+    return ImageTk.PhotoImage(img.resize((_ICON_SIZE, _ICON_SIZE), Image.LANCZOS))
+
+
 def _icon_button(parent: tk.Widget, photo: ImageTk.PhotoImage, on_click) -> tk.Label:
     """A small icon button drawn as a bitmap (via Pillow) rather than a text
     glyph -- symbols like "X" and a refresh arrow aren't reliably present in
     every font, and rendered as blank/tofu boxes on some machines depending
     on the OS's fallback font. A bitmap always looks the same everywhere."""
-    label = tk.Label(parent, image=photo, bg=_PANEL_BG, cursor="hand2", bd=0, padx=6, pady=4)
+    label = tk.Label(parent, image=photo, bg=_PANEL_BG, cursor="hand2", bd=0, padx=4, pady=4)
     label.image = photo  # keep a reference -- Tk doesn't, and would garbage-collect it
     label.bind("<Button-1>", lambda e: on_click())
     return label
@@ -201,31 +283,40 @@ def _reset_status_text(reset_at: Optional[datetime]) -> str:
     return f"리셋까지 {hours}시간 {minutes}분 후"
 
 
-def _add_usage_row(parent: tk.Widget, row: int, title: str, percent: int, reset_at: Optional[datetime]) -> dict:
-    percent_color = _rgb_to_hex(color_for_percent(percent))
+_ROW_CARD_HEIGHT = 132
+_ROW_CARD_WIDTH = _FLYOUT_WIDTH - 44  # matches _new_panel's body padx (22 each side)
+_RING_SIZE = 92
 
-    tk.Label(parent, text=title, font=_font(12, bold=True), bg=_PANEL_BG).grid(
-        column=0, row=row, sticky="w"
+
+def _add_usage_row(
+    parent: tk.Widget, row: int, title: str, percent: int, reset_at: Optional[datetime], pady=(0, 0)
+) -> dict:
+    card_canvas, content = _card_frame(parent, _ROW_CARD_WIDTH, _ROW_CARD_HEIGHT)
+    card_canvas.grid(column=0, row=row, sticky="w", pady=pady)
+
+    content.grid_columnconfigure(0, weight=1)
+    content.grid_rowconfigure(1, weight=1)
+
+    tk.Label(content, text=title, font=_font(13, weight="semibold"), bg=_PANEL_BG, fg=_TEXT_PRIMARY).grid(
+        column=0, row=0, sticky="nw", padx=(18, 0), pady=(16, 0)
     )
-    percent_label = tk.Label(parent, text=f"{percent}%", font=_font(16, bold=True), bg=_PANEL_BG, fg=percent_color)
-    percent_label.grid(column=1, row=row, sticky="e")
-    bar_canvas = _progress_bar(parent, percent)
-    bar_canvas.grid(column=0, row=row + 1, columnspan=2, sticky="ew", pady=(10, 6))
     reset_label = tk.Label(
-        parent,
-        text=_reset_status_text(reset_at),
-        font=_font(10),
-        fg=_MUTED_TEXT,
-        bg=_PANEL_BG,
+        content, text=_reset_status_text(reset_at), font=_font(10), fg=_MUTED_TEXT, bg=_PANEL_BG
     )
-    reset_label.grid(column=0, row=row + 2, columnspan=2, sticky="w")
+    reset_label.grid(column=0, row=2, sticky="sw", padx=(18, 0), pady=(0, 16))
 
-    return {"percent_label": percent_label, "bar_canvas": bar_canvas, "reset_label": reset_label}
+    ring_photo = _render_ring_with_percent(percent, size=_RING_SIZE)
+    ring_label = tk.Label(content, image=ring_photo, bg=_PANEL_BG)
+    ring_label.image = ring_photo  # keep a reference -- Tk doesn't, and would garbage-collect it
+    ring_label.grid(column=1, row=0, rowspan=3, sticky="e", padx=(0, 18))
+
+    return {"ring_label": ring_label, "reset_label": reset_label}
 
 
 def _update_usage_row(refs: dict, percent: int, reset_at: Optional[datetime]) -> None:
-    refs["percent_label"].config(text=f"{percent}%", fg=_rgb_to_hex(color_for_percent(percent)))
-    _draw_progress_fill(refs["bar_canvas"], percent)
+    ring_photo = _render_ring_with_percent(percent, size=_RING_SIZE)
+    refs["ring_label"].config(image=ring_photo)
+    refs["ring_label"].image = ring_photo
     refs["reset_label"].config(text=_reset_status_text(reset_at))
 
 
@@ -306,13 +397,21 @@ def _position_centered(window: tk.Toplevel, width: int, height: int) -> None:
 
 
 def _new_panel(
-    title: str, width: int, height: int, *, position: str = "cursor", close_on_leave: bool = False
+    title: str,
+    width: int,
+    height: int,
+    *,
+    position: str = "cursor",
+    close_on_leave: bool = False,
+    icon_photo: Optional[ImageTk.PhotoImage] = None,
 ) -> tuple:
     """A borderless, rounded, always-on-top panel -- similar to Windows' own
     volume/network flyouts -- rather than a plain dialog with a native
-    (OS-drawn) title bar. Used for both the usage flyout (anchored near the
-    click, auto-closes on pointer leave) and the settings window (centered,
-    stays open so it's usable while filling in the form)."""
+    (OS-drawn) title bar. Used for the usage flyout (anchored near the
+    click, auto-closes on pointer leave) and the settings/account windows
+    (centered, stay open so they're usable while interacting)."""
+    _ensure_ttk_theme()
+
     window = tk.Toplevel(_get_hidden_root())
     window.overrideredirect(True)
     window.attributes("-topmost", True)
@@ -336,15 +435,28 @@ def _new_panel(
     canvas.create_window(2, 2, window=panel, anchor="nw", width=width - 4, height=height - 4)
 
     header = tk.Frame(panel, bg=_PANEL_BG)
-    header.grid(column=0, row=0, sticky="ew", padx=20, pady=(16, 4))
-    header.grid_columnconfigure(0, weight=1)
-    tk.Label(header, text=title, font=_font(13, bold=True), bg=_PANEL_BG).grid(column=0, row=0, sticky="w")
+    header.grid(column=0, row=0, sticky="ew", padx=22, pady=(18, 6))
+    title_column = 0
+    if icon_photo is not None:
+        icon_label = tk.Label(header, image=icon_photo, bg=_PANEL_BG)
+        icon_label.image = icon_photo  # keep a reference -- Tk doesn't, and would garbage-collect it
+        icon_label.grid(column=0, row=0, sticky="w", padx=(0, 8))
+        title_column = 1
+    header.grid_columnconfigure(title_column, weight=1)
+    title_label = tk.Label(header, text=title, font=_font(14, weight="semibold"), bg=_PANEL_BG, fg=_TEXT_PRIMARY)
+    title_label.grid(column=title_column, row=0, sticky="w")
     close_btn = _icon_button(header, _render_close_icon(_MUTED_TEXT), window.destroy)
-    close_btn.grid(column=10, row=0, sticky="e")
+    close_btn.grid(column=10, row=0, sticky="e", padx=(_ICON_GAP, 0))
+    # bind dragging to the frame AND the title label -- the label only
+    # occupies its own text width (sticky="w", not stretched), but that's
+    # exactly where someone would naturally try to grab the window by, so
+    # it needs its own binding rather than relying on clicks landing on
+    # bare header background around it.
     _make_draggable(header, window)
+    _make_draggable(title_label, window)
 
     body = tk.Frame(panel, bg=_PANEL_BG)
-    body.grid(column=0, row=1, sticky="nsew", padx=20, pady=(10, 16))
+    body.grid(column=0, row=1, sticky="nsew", padx=22, pady=(8, 20))
 
     if position == "cursor":
         _position_near_cursor(window, width, height)
@@ -368,8 +480,9 @@ def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
     )
 
     session_refs = _add_usage_row(body, 0, "세션 (5시간)", usage.session_percent, usage.session_reset_at)
-    _divider(body).grid(row=3, column=0, columnspan=2, sticky="ew", pady=16)
-    week_refs = _add_usage_row(body, 4, "주간", usage.week_percent, usage.week_reset_at)
+    week_refs = _add_usage_row(
+        body, 1, "주간", usage.week_percent, usage.week_reset_at, pady=(12, 0)
+    )
 
     def toggle_pin() -> None:
         close_on_leave_active["value"] = not close_on_leave_active["value"]
@@ -379,7 +492,7 @@ def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
         pin_btn.image = photo
 
     pin_btn = _icon_button(header, _render_pin_icon(_MUTED_TEXT, filled=False), toggle_pin)
-    pin_btn.grid(column=1, row=0, sticky="e")
+    pin_btn.grid(column=1, row=0, sticky="e", padx=(_ICON_GAP, 0))
 
     if on_refresh is not None:
         def set_refresh_color(color: str) -> None:
@@ -408,13 +521,9 @@ def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
             on_refresh(on_done)
 
         refresh_btn = _icon_button(header, _render_refresh_icon(_MUTED_TEXT), do_refresh)
-        refresh_btn.grid(column=2, row=0, sticky="e")
+        refresh_btn.grid(column=2, row=0, sticky="e", padx=(_ICON_GAP, 0))
 
     window.wait_window()
-
-
-_ACCOUNT_WIDTH = 280
-_ACCOUNT_HEIGHT = 260
 
 
 def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch, on_logout) -> None:
@@ -423,27 +532,41 @@ def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch, on_
     first (rather than acting immediately on a menu click) avoids an
     accidental click force-logging someone out with no warning."""
     window, _header, body, _close_active = _new_panel(
-        "계정", _ACCOUNT_WIDTH, _ACCOUNT_HEIGHT, position="center"
+        "계정", _ACCOUNT_WIDTH, _ACCOUNT_HEIGHT, position="center",
+        icon_photo=_render_person_icon(_TEXT_PRIMARY),
     )
+    card_width = _ACCOUNT_WIDTH - 44
 
-    status_text = "로그아웃 상태입니다" if is_logged_out else f"현재 로그인:\n{email or '확인 중...'}"
+    card_canvas, card = _card_frame(body, card_width, 78)
+    card_canvas.grid(column=0, row=0, sticky="ew")
+
+    status_label = "현재 상태" if is_logged_out else "현재 로그인"
+    status_value = "로그아웃됨" if is_logged_out else (email or "확인 중...")
+    tk.Label(card, text=status_label, font=_font(10, weight="medium"), fg=_MUTED_TEXT, bg=_PANEL_BG).grid(
+        column=0, row=0, sticky="w", padx=18, pady=(14, 0)
+    )
     tk.Label(
-        body, text=status_text, font=_font(11), bg=_PANEL_BG, wraplength=230, justify="left"
-    ).grid(column=0, row=0, sticky="w", pady=(0, 16))
+        card, text=status_value, font=_font(12, weight="semibold"), fg=_TEXT_PRIMARY, bg=_PANEL_BG,
+        wraplength=card_width - 36, justify="left",
+    ).grid(column=0, row=1, sticky="w", padx=18, pady=(2, 14))
 
     def switch_and_close():
         window.destroy()
         on_switch()
 
     switch_label = "로그인" if is_logged_out else "계정 변경"
-    ttk.Button(body, text=switch_label, command=switch_and_close).grid(column=0, row=1, sticky="ew")
+    ttk.Button(body, text=switch_label, command=switch_and_close, style="Accent.TButton").grid(
+        column=0, row=1, sticky="ew", pady=(16, 0), ipady=4
+    )
 
     if not is_logged_out:
         def logout_and_close():
             window.destroy()
             on_logout()
 
-        ttk.Button(body, text="로그아웃", command=logout_and_close).grid(column=0, row=2, sticky="ew", pady=(8, 0))
+        ttk.Button(body, text="로그아웃", command=logout_and_close).grid(
+            column=0, row=2, sticky="ew", pady=(10, 0), ipady=4
+        )
 
     window.wait_window()
 
@@ -453,38 +576,50 @@ def show_settings_popup(on_saved=None) -> None:
     main.py refresh the tray icon immediately instead of waiting for the
     next scheduled tick (up to refresh_seconds later)."""
     config = Config.load()
-    sv_ttk.set_theme("light")
-    window, _header, body, _close_active = _new_panel("설정", _SETTINGS_WIDTH, _SETTINGS_HEIGHT, position="center")
-
-    tk.Label(body, text="갱신 주기", font=_font(12, bold=True), bg=_PANEL_BG).grid(
-        column=0, row=0, columnspan=2, sticky="w"
+    window, _header, body, _close_active = _new_panel(
+        "설정", _SETTINGS_WIDTH, _SETTINGS_HEIGHT, position="center",
+        icon_photo=_render_settings_icon(_TEXT_PRIMARY),
     )
+    card_width = _SETTINGS_WIDTH - 44
 
-    entry_row = tk.Frame(body, bg=_PANEL_BG)
-    entry_row.grid(column=0, row=1, columnspan=2, sticky="w", pady=(10, 4))
+    interval_card_canvas, interval_card = _card_frame(body, card_width, 112)
+    interval_card_canvas.grid(column=0, row=0, sticky="ew")
+    interval_card.grid_columnconfigure(0, weight=1)
+
+    tk.Label(interval_card, text="갱신 주기", font=_font(12, weight="semibold"), bg=_PANEL_BG, fg=_TEXT_PRIMARY).grid(
+        column=0, row=0, columnspan=2, sticky="w", padx=18, pady=(14, 0)
+    )
+    entry_row = tk.Frame(interval_card, bg=_PANEL_BG)
+    entry_row.grid(column=0, row=1, columnspan=2, sticky="w", padx=18, pady=(8, 4))
     interval_var = tk.IntVar(value=config.refresh_seconds)
-    ttk.Entry(entry_row, textvariable=interval_var, width=8, font=_font(11)).grid(column=0, row=0)
-    tk.Label(entry_row, text="초", font=_font(11), bg=_PANEL_BG).grid(column=1, row=0, padx=(8, 0))
+    ttk.Entry(entry_row, textvariable=interval_var, width=8, font=_font(11)).grid(column=0, row=0, ipady=2)
+    tk.Label(entry_row, text="초", font=_font(11), bg=_PANEL_BG, fg=_TEXT_PRIMARY).grid(column=1, row=0, padx=(10, 0))
+    tk.Label(
+        interval_card, text="예: 900초 = 15분", font=_font(9), fg=_MUTED_TEXT, bg=_PANEL_BG
+    ).grid(column=0, row=2, columnspan=2, sticky="w", padx=18, pady=(0, 14))
+
+    style_card_height = 150 if sys.platform == "win32" else 100
+    style_card_canvas, style_card = _card_frame(body, card_width, style_card_height)
+    style_card_canvas.grid(column=0, row=1, sticky="ew", pady=(14, 0))
+    style_card.grid_columnconfigure(0, weight=1)
 
     tk.Label(
-        body, text="예: 900초 = 15분", font=_font(9), fg=_MUTED_TEXT, bg=_PANEL_BG
-    ).grid(column=0, row=2, columnspan=2, sticky="w")
-
-    tk.Label(body, text="트레이 아이콘 스타일", font=_font(12, bold=True), bg=_PANEL_BG).grid(
-        column=0, row=3, columnspan=2, sticky="w", pady=(16, 0)
-    )
+        style_card, text="트레이 아이콘 스타일", font=_font(12, weight="semibold"), bg=_PANEL_BG, fg=_TEXT_PRIMARY
+    ).grid(column=0, row=0, sticky="w", padx=18, pady=(14, 0))
     label_by_style = STYLE_LABELS
     style_by_label = {label: style for style, label in STYLE_LABELS.items()}
     style_var = tk.StringVar(value=label_by_style.get(config.tray_icon_style, label_by_style[DEFAULT_STYLE]))
     ttk.Combobox(
-        body, textvariable=style_var, values=list(STYLE_LABELS.values()), state="readonly", font=_font(10)
-    ).grid(column=0, row=4, columnspan=2, sticky="ew", pady=(8, 0))
+        style_card, textvariable=style_var, values=list(STYLE_LABELS.values()), state="readonly", font=_font(10)
+    ).grid(column=0, row=1, sticky="ew", padx=18, pady=(8, 0), ipady=2)
 
     autostart_var = tk.BooleanVar(value=autostart.is_enabled())
     if sys.platform == "win32":
         ttk.Checkbutton(
-            body, text="PC 시작 시 자동 실행", variable=autostart_var
-        ).grid(column=0, row=5, columnspan=2, sticky="w", pady=(16, 0))
+            style_card, text="PC 시작 시 자동 실행", variable=autostart_var
+        ).grid(column=0, row=2, sticky="w", padx=18, pady=(14, 14))
+    else:
+        tk.Frame(style_card, height=14, bg=_PANEL_BG).grid(column=0, row=2)
 
     def on_save():
         config.refresh_seconds = interval_var.get()
@@ -498,8 +633,8 @@ def show_settings_popup(on_saved=None) -> None:
         if on_saved is not None:
             on_saved()
 
-    ttk.Button(body, text="저장", command=on_save).grid(
-        column=0, row=6, columnspan=2, sticky="ew", pady=(16, 0)
+    ttk.Button(body, text="저장", command=on_save, style="Accent.TButton").grid(
+        column=0, row=2, sticky="ew", pady=(16, 0), ipady=4
     )
 
     window.wait_window()
