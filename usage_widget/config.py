@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 
 from usage_widget.paths import config_path
 
-DEFAULT_REFRESH_SECONDS = 2 * 60
+DEFAULT_REFRESH_SECONDS = 60
 
 
 @dataclass
