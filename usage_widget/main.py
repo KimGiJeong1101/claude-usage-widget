@@ -17,6 +17,7 @@ import pystray
 from usage_widget.auth import has_saved_session, login_and_save_session
 from usage_widget.config import Config
 from usage_widget.fetcher import SessionExpiredError, fetch_usage
+from usage_widget.paths import session_state_path
 from usage_widget.popup import get_gui_root, show_settings_popup, show_usage_popup
 from usage_widget.tray_icon import build_icon_image
 
@@ -95,6 +96,32 @@ def _on_settings(icon: pystray.Icon, item) -> None:
     get_gui_root().after(0, lambda: show_settings_popup(on_saved=lambda: _update_icon(icon)))
 
 
+def _switch_account(icon: pystray.Icon) -> None:
+    """Clears the saved session and immediately opens a fresh login window,
+    so switching claude.ai accounts doesn't require manually finding and
+    deleting the session file. Runs on a worker thread, same as manual
+    refresh -- login_and_save_session() blocks until the user finishes (or
+    closes) the browser window, which would otherwise freeze pystray's
+    message loop for however long that takes."""
+
+    def worker():
+        global _latest_usage, _last_error
+        session_state_path().unlink(missing_ok=True)
+        try:
+            login_and_save_session()
+            _latest_usage = _fetch_with_relogin()
+            _last_error = None
+        except Exception as exc:
+            _last_error = str(exc)
+        _update_icon(icon)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def _on_switch_account(icon: pystray.Icon, item) -> None:
+    _switch_account(icon)
+
+
 def _on_quit(icon: pystray.Icon, item) -> None:
     icon.stop()
     root = get_gui_root()
@@ -116,6 +143,7 @@ def run() -> None:
     menu = pystray.Menu(
         pystray.MenuItem("열기", _on_open, default=True),
         pystray.MenuItem("설정", _on_settings),
+        pystray.MenuItem("계정 변경", _on_switch_account),
         pystray.MenuItem("종료", _on_quit),
     )
     icon = pystray.Icon(
