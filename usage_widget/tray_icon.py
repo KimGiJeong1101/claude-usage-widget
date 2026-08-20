@@ -175,6 +175,29 @@ STYLE_LABELS = {
 DEFAULT_STYLE = "donut"
 
 
-def build_icon_image(session_percent: int, week_percent: int, style: str = DEFAULT_STYLE) -> Image.Image:
+LOGGED_OUT_COLOR = (150, 150, 150)
+
+
+def _build_logged_out(style: str) -> Image.Image:
+    """The chosen style's shape, but with every severity color (green/
+    yellow/red) replaced by a neutral gray -- a colored reading would look
+    like a real usage percentage, which would be misleading while logged
+    out and not actually being tracked."""
+    builder = STYLES.get(style, STYLES[DEFAULT_STYLE])
+    img = builder(50, 50).convert("RGBA")
+    pixels = img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, a = pixels[x, y]
+            if (r, g, b) in (GREEN, YELLOW, RED):
+                pixels[x, y] = (*LOGGED_OUT_COLOR, a)
+    return img
+
+
+def build_icon_image(
+    session_percent: int, week_percent: int, style: str = DEFAULT_STYLE, logged_out: bool = False
+) -> Image.Image:
+    if logged_out:
+        return _build_logged_out(style)
     builder = STYLES.get(style, STYLES[DEFAULT_STYLE])
     return builder(session_percent, week_percent)

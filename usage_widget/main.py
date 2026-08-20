@@ -16,22 +16,29 @@ import pystray
 
 from usage_widget.auth import has_saved_session, login_and_save_session
 from usage_widget.config import Config
-from usage_widget.fetcher import SessionExpiredError, fetch_usage
+from usage_widget.fetcher import SessionExpiredError, fetch_account_email, fetch_usage
 from usage_widget.paths import session_state_path
-from usage_widget.popup import get_gui_root, show_settings_popup, show_usage_popup
+from usage_widget.popup import get_gui_root, show_account_popup, show_settings_popup, show_usage_popup
 from usage_widget.tray_icon import build_icon_image
 
 _TOOLTIP = "Claude 사용량"
 
 _latest_usage = None
 _last_error = None
+_account_email = None
+_logged_out = False  # True after an explicit "로그아웃": stays paused (no
+# fetch attempts, no auto re-login) until the user acts via "계정 변경".
 
 
 def _update_icon(icon: pystray.Icon) -> None:
-    """Reflects the current usage percent and, if the last fetch failed,
-    a failure note in the tray tooltip -- otherwise a dead background
-    thread (e.g. after a declined re-login) would leave the icon frozen
-    on stale data with no visible sign anything is wrong."""
+    """Reflects the current usage percent and, if the last fetch failed or
+    the user is logged out, a note in the tray tooltip -- otherwise a dead
+    background thread (e.g. after a declined re-login) would leave the icon
+    frozen on stale data with no visible sign anything is wrong."""
+    if _logged_out:
+        icon.icon = build_icon_image(0, 0, style=Config.load().tray_icon_style, logged_out=True)
+        icon.title = f"{_TOOLTIP} (로그아웃됨)"
+        return
     style = Config.load().tray_icon_style
     icon.icon = build_icon_image(_latest_usage.session_percent, _latest_usage.week_percent, style=style)
     icon.title = _TOOLTIP if _last_error is None else f"{_TOOLTIP} (갱신 실패, 재시도 중)"
@@ -51,16 +58,27 @@ def _fetch_with_relogin():
         return fetch_usage()
 
 
+def _refresh_account_email() -> None:
+    """Best-effort -- the email is only shown in the account dialog, so a
+    failure here shouldn't affect usage fetching at all."""
+    global _account_email
+    try:
+        _account_email = fetch_account_email()
+    except Exception:
+        _account_email = None
+
+
 def _refresh_loop(icon: pystray.Icon) -> None:
     global _latest_usage, _last_error
     while True:
         config = Config.load()
-        try:
-            _latest_usage = _fetch_with_relogin()
-            _last_error = None
-        except Exception as exc:
-            _last_error = str(exc)
-        _update_icon(icon)
+        if not _logged_out:
+            try:
+                _latest_usage = _fetch_with_relogin()
+                _last_error = None
+            except Exception as exc:
+                _last_error = str(exc)
+            _update_icon(icon)
         time.sleep(config.refresh_seconds)
 
 
@@ -86,7 +104,51 @@ def _manual_refresh(icon: pystray.Icon, on_done) -> None:
     threading.Thread(target=worker, daemon=True).start()
 
 
+def _do_logout(icon: pystray.Icon) -> None:
+    global _logged_out, _account_email
+    session_state_path().unlink(missing_ok=True)
+    _logged_out = True
+    _account_email = None
+    _update_icon(icon)
+
+
+def _do_switch_account(icon: pystray.Icon) -> None:
+    """Clears the saved session and immediately opens a fresh login window.
+    Runs on a worker thread, same as manual refresh --
+    login_and_save_session() blocks until the user finishes (or closes) the
+    browser window, which would otherwise freeze pystray's message loop for
+    however long that takes."""
+
+    def worker():
+        global _latest_usage, _last_error, _logged_out
+        session_state_path().unlink(missing_ok=True)
+        try:
+            login_and_save_session()
+            _latest_usage = _fetch_with_relogin()
+            _last_error = None
+            _logged_out = False
+            _refresh_account_email()
+        except Exception as exc:
+            _last_error = str(exc)
+            _logged_out = True  # didn't complete -- stay paused, don't nag
+        _update_icon(icon)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def _show_account_dialog(icon: pystray.Icon) -> None:
+    show_account_popup(
+        _account_email,
+        _logged_out,
+        on_switch=lambda: _do_switch_account(icon),
+        on_logout=lambda: _do_logout(icon),
+    )
+
+
 def _on_open(icon: pystray.Icon, item) -> None:
+    if _logged_out:
+        get_gui_root().after(0, lambda: _show_account_dialog(icon))
+        return
     get_gui_root().after(
         0, lambda: show_usage_popup(_latest_usage, on_refresh=lambda on_done: _manual_refresh(icon, on_done))
     )
@@ -96,30 +158,8 @@ def _on_settings(icon: pystray.Icon, item) -> None:
     get_gui_root().after(0, lambda: show_settings_popup(on_saved=lambda: _update_icon(icon)))
 
 
-def _switch_account(icon: pystray.Icon) -> None:
-    """Clears the saved session and immediately opens a fresh login window,
-    so switching claude.ai accounts doesn't require manually finding and
-    deleting the session file. Runs on a worker thread, same as manual
-    refresh -- login_and_save_session() blocks until the user finishes (or
-    closes) the browser window, which would otherwise freeze pystray's
-    message loop for however long that takes."""
-
-    def worker():
-        global _latest_usage, _last_error
-        session_state_path().unlink(missing_ok=True)
-        try:
-            login_and_save_session()
-            _latest_usage = _fetch_with_relogin()
-            _last_error = None
-        except Exception as exc:
-            _last_error = str(exc)
-        _update_icon(icon)
-
-    threading.Thread(target=worker, daemon=True).start()
-
-
 def _on_switch_account(icon: pystray.Icon, item) -> None:
-    _switch_account(icon)
+    get_gui_root().after(0, lambda: _show_account_dialog(icon))
 
 
 def _on_quit(icon: pystray.Icon, item) -> None:
@@ -139,11 +179,12 @@ def run() -> None:
         login_and_save_session()
 
     _latest_usage = _fetch_with_relogin()
+    _refresh_account_email()
 
     menu = pystray.Menu(
         pystray.MenuItem("열기", _on_open, default=True),
         pystray.MenuItem("설정", _on_settings),
-        pystray.MenuItem("계정 변경", _on_switch_account),
+        pystray.MenuItem("계정", _on_switch_account),
         pystray.MenuItem("종료", _on_quit),
     )
     icon = pystray.Icon(

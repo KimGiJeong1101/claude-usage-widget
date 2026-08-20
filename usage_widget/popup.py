@@ -413,6 +413,41 @@ def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
     window.wait_window()
 
 
+_ACCOUNT_WIDTH = 280
+_ACCOUNT_HEIGHT = 260
+
+
+def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch, on_logout) -> None:
+    """Confirms which account is currently active before doing anything
+    disruptive -- both buttons clear the saved session, so showing this
+    first (rather than acting immediately on a menu click) avoids an
+    accidental click force-logging someone out with no warning."""
+    window, _header, body, _close_active = _new_panel(
+        "계정", _ACCOUNT_WIDTH, _ACCOUNT_HEIGHT, position="center"
+    )
+
+    status_text = "로그아웃 상태입니다" if is_logged_out else f"현재 로그인:\n{email or '확인 중...'}"
+    tk.Label(
+        body, text=status_text, font=_font(11), bg=_PANEL_BG, wraplength=230, justify="left"
+    ).grid(column=0, row=0, sticky="w", pady=(0, 16))
+
+    def switch_and_close():
+        window.destroy()
+        on_switch()
+
+    switch_label = "로그인" if is_logged_out else "계정 변경"
+    ttk.Button(body, text=switch_label, command=switch_and_close).grid(column=0, row=1, sticky="ew")
+
+    if not is_logged_out:
+        def logout_and_close():
+            window.destroy()
+            on_logout()
+
+        ttk.Button(body, text="로그아웃", command=logout_and_close).grid(column=0, row=2, sticky="ew", pady=(8, 0))
+
+    window.wait_window()
+
+
 def show_settings_popup(on_saved=None) -> None:
     """on_saved, if given, is called right after a successful save -- lets
     main.py refresh the tray icon immediately instead of waiting for the

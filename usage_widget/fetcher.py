@@ -17,6 +17,7 @@ from playwright.sync_api import sync_playwright
 from usage_widget.paths import session_state_path
 
 API_BASE = "https://claude.ai/api/organizations"
+BOOTSTRAP_ENDPOINT = "https://claude.ai/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk"
 
 
 class SessionExpiredError(Exception):
@@ -76,6 +77,29 @@ def fetch_usage() -> UsageData:
         session_reset_at=_parse_reset_at(data["five_hour"]["resets_at"]),
         week_reset_at=_parse_reset_at(data["seven_day"]["resets_at"]),
     )
+
+
+def fetch_account_email() -> str:
+    """The SPA's own initial-load endpoint, referenced in its bootstrap JS
+    as apiPrefix + "/bootstrap" -- returns account info (among other
+    things) including the email address of whoever the saved session
+    belongs to, so the "switch account" dialog can show who's currently
+    logged in."""
+    if not session_state_path().exists():
+        raise SessionExpiredError("no saved session")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, channel="chrome")
+        try:
+            context = browser.new_context(storage_state=str(session_state_path()))
+            response = context.request.get(BOOTSTRAP_ENDPOINT)
+            if response.status != 200:
+                raise SessionExpiredError(f"bootstrap endpoint returned {response.status}")
+            data = response.json()
+        finally:
+            browser.close()
+
+    return data["account"]["email_address"]
 
 
 def fetch_usage_mock() -> UsageData:
