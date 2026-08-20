@@ -2,22 +2,60 @@
 
 # Claude Usage Widget
 
-**claude.ai 세션 / 주간 사용량을 트레이 아이콘으로 항상 확인하세요**
+**claude.ai 세션 / 주간 사용량을, 창을 열어보지 않고도 트레이 아이콘 한 번의 시선으로**
 
 [![Latest Release](https://img.shields.io/github/v/release/KimGiJeong1101/claude-usage-widget?label=release&color=4a9eff)](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest)
 [![Build](https://github.com/KimGiJeong1101/claude-usage-widget/actions/workflows/release.yml/badge.svg)](https://github.com/KimGiJeong1101/claude-usage-widget/actions/workflows/release.yml)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-6e6e6e)](#다운로드)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-6e6e6e)](#-다운로드)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776ab)](pyproject.toml)
 
-<img src="docs/screenshot.png" width="480" alt="Claude Usage Widget 팝업 목업">
+<img src="docs/screenshot.png" width="440" alt="Claude Usage Widget 사용량 팝업 목업">
 
 </div>
 
+<br>
+
+## 목차
+
+- [특징](#-특징)
+- [미리보기](#-미리보기)
+- [다운로드](#-다운로드)
+- [사용법](#사용법)
+- [개발자용](#-개발자용)
+- [참고](#참고)
+
+<br>
+
 ## ✨ 특징
 
-- 🟢 **트레이 상주**: 세션(5시간) 사용량을 원형 게이지로 항상 표시, 클릭하면 세션/주간 상세 팝업
-- 🔄 **즉시 새로고침**: 갱신 주기를 기다리지 않고 팝업에서 바로 최신 데이터 확인
-- 🔐 **최초 1회 로그인**: 이후엔 자동으로 세션 유지, 재부팅해도 다시 로그인 안 해도 됨
-- 🪟🍎 **Windows / macOS 지원**
+|  |  |
+| --- | --- |
+| 🟢 **실시간 트레이 게이지** | 세션(5시간) 사용량이 트레이 아이콘에 항상 표시됩니다. 클릭 한 번으로 세션 / 주간 상세 팝업 |
+| 📌 **팝업 고정** | 기본은 마우스가 벗어나면 자동으로 닫히고, 고정 버튼으로 계속 띄워둘 수 있습니다 |
+| 🔄 **즉시 새로고침** | 갱신 주기를 기다리지 않고 팝업에서 바로 최신 데이터를 가져옵니다 |
+| 🎨 **트레이 아이콘 스타일 5종** | 도넛 게이지 / 배터리 / 막대 / 숫자 / 원형 채움 중 취향대로 선택 (설정에서 변경) |
+| 👤 **계정 관리** | 현재 로그인된 계정 확인, 다른 계정으로 전환, 로그아웃(로그아웃 중엔 추적을 완전히 멈춤) |
+| 🚀 **Windows 자동 시작** | PC 켤 때 자동 실행 여부를 설정에서 켜고 끌 수 있습니다 |
+| 🔐 **최초 1회 로그인** | 이후엔 세션이 자동 유지되어, 재부팅해도 다시 로그인할 필요가 없습니다 |
+| 🪟🍎 **Windows / macOS 지원** | 하나의 코드베이스로 두 플랫폼 빌드를 제공합니다 |
+
+<br>
+
+## 🖼️ 미리보기
+
+<div align="center">
+
+<img src="docs/screenshot.png" width="300" alt="사용량 팝업"><br>
+<sub>사용량 팝업 — 클릭 위치 근처에 뜨고, 📌로 고정하지 않으면 마우스가 벗어날 때 자동으로 닫힙니다</sub>
+
+<br><br>
+
+<img src="docs/screenshot-settings.png" width="260" alt="설정 팝업">　<img src="docs/screenshot-account.png" width="260" alt="계정 팝업"><br>
+<sub>설정 (갱신 주기 / 트레이 아이콘 스타일 / 자동 실행)　　　　계정 (로그인 상태 확인 / 전환 / 로그아웃)</sub>
+
+</div>
+
+<br>
 
 ## 📥 다운로드
 
@@ -28,6 +66,9 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 | Windows | 설치형 (.msi) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget.msi)** |
 | Windows | 포터블 (.zip, 설치 없이 실행) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-win.zip)** |
 | macOS | 디스크 이미지 (.dmg) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.dmg)** |
+
+> [!WARNING]
+> **macOS 빌드는 아직 실제 Mac에서 동작 검증이 되지 않았습니다.** GitHub Actions로 macOS 러너에서 빌드는 되지만, 실사용 테스트 전이라 다운로드해도 정상적으로 실행되지 않을 수 있습니다. macOS에서 문제를 겪으셨다면 이슈로 알려주세요.
 
 <details>
 <summary>실행 시 경고가 뜬다면?</summary>
@@ -40,6 +81,8 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 
 </details>
 
+<br>
+
 ## 사용법
 
 최초 실행 시 로그인 창이 뜨고, 로그인하면 트레이/메뉴바 아이콘으로 상주합니다.
@@ -48,13 +91,12 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 | --- | --- |
 | 좌클릭 | 세션/주간 사용량 %와 리셋 시간 팝업 (클릭 위치 근처에 뜨고, 마우스가 벗어나면 자동으로 닫힘) |
 | 팝업의 📌 / ⟳ | 팝업 고정(안 닫히게) / 갱신 주기를 기다리지 않고 즉시 새로고침 |
-| 우클릭 | 열기 / 설정(갱신 주기, 트레이 아이콘 스타일, 자동 실행) / 계정(로그인 계정 확인, 전환, 로그아웃) / 종료 |
+| 우클릭 → 열기 | 좌클릭과 동일하게 사용량 팝업을 엽니다 |
+| 우클릭 → 설정 | 갱신 주기, 트레이 아이콘 스타일, (Windows) PC 시작 시 자동 실행 여부 |
+| 우클릭 → 계정 | 현재 로그인 계정 확인, 계정 변경(재로그인), 로그아웃 |
+| 우클릭 → 종료 | 위젯 완전히 종료 |
 
-<div align="center">
-
-<img src="docs/screenshot-settings.png" width="260" alt="설정 팝업 목업"> &nbsp;&nbsp; <img src="docs/screenshot-account.png" width="260" alt="계정 팝업 목업">
-
-</div>
+<br>
 
 ## 🛠️ 개발자용
 
@@ -72,6 +114,10 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 - claude.ai는 Cloudflare 봇 방어가 걸려 있어 일반 HTTP 클라이언트(`httpx` 등)로는
   요청이 막힙니다. 이 프로젝트는 Playwright의 headless 브라우저 컨텍스트를 통해
   요청을 보내는 방식으로 이를 우회합니다 (페이지 전체를 렌더링하지는 않음).
+- "로그아웃"은 단순히 세션을 지우는 것이 아니라, 사용자가 다시 로그인하기 전까지
+  백그라운드 새로고침/자동 재로그인 시도를 완전히 멈추는 일시정지 상태입니다.
+- Windows 자동 시작은 관리자 권한 없이 `HKEY_CURRENT_USER` 레지스트리의
+  Run 키에 등록하는 방식으로 동작합니다.
 
 </details>
 
@@ -107,6 +153,8 @@ pyinstaller --onefile --windowed --name ClaudeUsageWidget --add-data "usage_widg
 push하면 GitHub Actions가 Windows/macOS 빌드를 자동으로 만들어 릴리즈에 올립니다.
 
 </details>
+
+<br>
 
 ## 참고
 
