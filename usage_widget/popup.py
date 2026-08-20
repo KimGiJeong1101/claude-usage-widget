@@ -153,6 +153,29 @@ def _render_refresh_icon(color: str) -> ImageTk.PhotoImage:
     return ImageTk.PhotoImage(img.resize((_ICON_SIZE, _ICON_SIZE), Image.LANCZOS))
 
 
+def _render_pin_icon(color: str, filled: bool) -> ImageTk.PhotoImage:
+    """Filled = pinned (stays open once the pointer leaves); outline = the
+    default hover-to-preview behavior."""
+    size = _ICON_SIZE * _ICON_RENDER_SCALE
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    cx = size / 2
+    head_cy = size * 0.38
+    head_r = size * 0.22
+    tip_y = size * 0.88
+    w = max(2, int(size * 0.09))
+    if filled:
+        draw.ellipse([cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r], fill=color)
+        draw.polygon(
+            [(cx - head_r * 0.55, head_cy + head_r * 0.6), (cx + head_r * 0.55, head_cy + head_r * 0.6), (cx, tip_y)],
+            fill=color,
+        )
+    else:
+        draw.ellipse([cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r], outline=color, width=w)
+        draw.line([cx, head_cy + head_r, cx, tip_y], fill=color, width=w)
+    return ImageTk.PhotoImage(img.resize((_ICON_SIZE, _ICON_SIZE), Image.LANCZOS))
+
+
 def _icon_button(parent: tk.Widget, photo: ImageTk.PhotoImage, on_click) -> tk.Label:
     """A small icon button drawn as a bitmap (via Pillow) rather than a text
     glyph -- symbols like "X" and a refresh arrow aren't reliably present in
@@ -221,21 +244,28 @@ def _make_draggable(handle: tk.Widget, window: tk.Toplevel) -> None:
     handle.bind("<B1-Motion>", move)
 
 
-def _close_when_pointer_leaves(window: tk.Toplevel, grace_ms: int = 600, poll_ms: int = 150) -> None:
+def _close_when_pointer_leaves(
+    window: tk.Toplevel, active: dict, grace_ms: int = 600, poll_ms: int = 150
+) -> None:
     """Polls the actual OS cursor position rather than relying on Tk
     Enter/Leave events, which fire per-child-widget (e.g. moving from the
     canvas onto an embedded label counts as "leaving" the canvas) and would
-    otherwise close the flyout while the pointer is still over it."""
+    otherwise close the flyout while the pointer is still over it.
+
+    active["value"] can be flipped to False (the pin button does this) to
+    pause this entirely -- the poll keeps running so it resumes correctly
+    if unpinned later, it just skips the close check while paused."""
 
     def check():
         if not window.winfo_exists():
             return
-        x, y = window.winfo_pointerx(), window.winfo_pointery()
-        left, top = window.winfo_rootx(), window.winfo_rooty()
-        if left <= x <= left + window.winfo_width() and top <= y <= top + window.winfo_height():
-            window.after(poll_ms, check)
-        else:
-            window.destroy()
+        if active["value"]:
+            x, y = window.winfo_pointerx(), window.winfo_pointery()
+            left, top = window.winfo_rootx(), window.winfo_rooty()
+            if not (left <= x <= left + window.winfo_width() and top <= y <= top + window.winfo_height()):
+                window.destroy()
+                return
+        window.after(poll_ms, check)
 
     window.after(grace_ms, check)
 
@@ -310,7 +340,7 @@ def _new_panel(
     header.grid_columnconfigure(0, weight=1)
     tk.Label(header, text=title, font=_font(13, bold=True), bg=_PANEL_BG).grid(column=0, row=0, sticky="w")
     close_btn = _icon_button(header, _render_close_icon(_MUTED_TEXT), window.destroy)
-    close_btn.grid(column=2, row=0, sticky="e")
+    close_btn.grid(column=10, row=0, sticky="e")
     _make_draggable(header, window)
 
     body = tk.Frame(panel, bg=_PANEL_BG)
@@ -321,10 +351,11 @@ def _new_panel(
     else:
         _position_centered(window, width, height)
 
-    if close_on_leave:
-        _close_when_pointer_leaves(window)
+    close_on_leave_active = {"value": True} if close_on_leave else None
+    if close_on_leave_active is not None:
+        _close_when_pointer_leaves(window, close_on_leave_active)
     window.after(50, lambda: (window.focus_force(), window.lift()))
-    return window, header, body
+    return window, header, body, close_on_leave_active
 
 
 def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
@@ -332,13 +363,23 @@ def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
     refresh button is clicked -- it's expected to fetch fresh data in the
     background and call on_done(new_usage) from the GUI thread once ready
     (see main.py's _manual_refresh), so this never blocks the window."""
-    window, header, body = _new_panel(
+    window, header, body, close_on_leave_active = _new_panel(
         "Claude 사용량", _FLYOUT_WIDTH, _FLYOUT_HEIGHT, position="cursor", close_on_leave=True
     )
 
     session_refs = _add_usage_row(body, 0, "세션 (5시간)", usage.session_percent, usage.session_reset_at)
     _divider(body).grid(row=3, column=0, columnspan=2, sticky="ew", pady=16)
     week_refs = _add_usage_row(body, 4, "주간", usage.week_percent, usage.week_reset_at)
+
+    def toggle_pin() -> None:
+        close_on_leave_active["value"] = not close_on_leave_active["value"]
+        pinned = not close_on_leave_active["value"]
+        photo = _render_pin_icon("#4a9eff" if pinned else _MUTED_TEXT, filled=pinned)
+        pin_btn.config(image=photo)
+        pin_btn.image = photo
+
+    pin_btn = _icon_button(header, _render_pin_icon(_MUTED_TEXT, filled=False), toggle_pin)
+    pin_btn.grid(column=1, row=0, sticky="e")
 
     if on_refresh is not None:
         def set_refresh_color(color: str) -> None:
@@ -367,7 +408,7 @@ def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
             on_refresh(on_done)
 
         refresh_btn = _icon_button(header, _render_refresh_icon(_MUTED_TEXT), do_refresh)
-        refresh_btn.grid(column=1, row=0, sticky="e")
+        refresh_btn.grid(column=2, row=0, sticky="e")
 
     window.wait_window()
 
@@ -375,7 +416,7 @@ def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
 def show_settings_popup() -> None:
     config = Config.load()
     sv_ttk.set_theme("light")
-    window, _header, body = _new_panel("설정", _SETTINGS_WIDTH, _SETTINGS_HEIGHT, position="center")
+    window, _header, body, _close_active = _new_panel("설정", _SETTINGS_WIDTH, _SETTINGS_HEIGHT, position="center")
 
     tk.Label(body, text="갱신 주기", font=_font(12, bold=True), bg=_PANEL_BG).grid(
         column=0, row=0, columnspan=2, sticky="w"
