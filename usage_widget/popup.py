@@ -11,7 +11,7 @@ from typing import Optional
 import sv_ttk
 from PIL import Image, ImageDraw, ImageTk
 
-from usage_widget import fonts
+from usage_widget import autostart, fonts
 from usage_widget.config import Config
 from usage_widget.fetcher import UsageData
 from usage_widget.tray_icon import DEFAULT_STYLE, STYLE_LABELS, color_for_percent
@@ -30,7 +30,7 @@ _KEY_COLOR = "#0a1a2a"  # arbitrary color used as the Windows "transparent" key
 _FLYOUT_WIDTH = 320
 _FLYOUT_HEIGHT = 260
 _SETTINGS_WIDTH = 280
-_SETTINGS_HEIGHT = 300
+_SETTINGS_HEIGHT = 350
 _CURSOR_GAP = 24  # how far inside the flyout's near edge the cursor lands
 
 _IS_WINDOWS = sys.platform == "win32"
@@ -445,16 +445,26 @@ def show_settings_popup(on_saved=None) -> None:
         body, textvariable=style_var, values=list(STYLE_LABELS.values()), state="readonly", font=_font(10)
     ).grid(column=0, row=4, columnspan=2, sticky="ew", pady=(8, 0))
 
+    autostart_var = tk.BooleanVar(value=autostart.is_enabled())
+    if sys.platform == "win32":
+        ttk.Checkbutton(
+            body, text="PC 시작 시 자동 실행", variable=autostart_var
+        ).grid(column=0, row=5, columnspan=2, sticky="w", pady=(16, 0))
+
     def on_save():
         config.refresh_seconds = interval_var.get()
         config.tray_icon_style = style_by_label.get(style_var.get(), DEFAULT_STYLE)
         config.save()
+        if autostart_var.get():
+            autostart.enable()
+        else:
+            autostart.disable()
         window.destroy()
         if on_saved is not None:
             on_saved()
 
     ttk.Button(body, text="저장", command=on_save).grid(
-        column=0, row=5, columnspan=2, sticky="ew", pady=(16, 0)
+        column=0, row=6, columnspan=2, sticky="ew", pady=(16, 0)
     )
 
     window.wait_window()
