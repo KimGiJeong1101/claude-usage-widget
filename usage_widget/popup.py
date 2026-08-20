@@ -1,12 +1,15 @@
 """Flyout shown when the tray icon is clicked, and the settings window
 reachable from the right-click menu."""
 
+import math
 import sys
 import tkinter as tk
 from datetime import datetime
 from tkinter import ttk
+from typing import Optional
 
 import sv_ttk
+from PIL import Image, ImageDraw, ImageTk
 
 from usage_widget import fonts
 from usage_widget.config import Config
@@ -115,17 +118,67 @@ def _divider(parent: tk.Widget) -> tk.Frame:
     return tk.Frame(parent, height=1, bg=_DIVIDER)
 
 
-def _format_remaining(reset_at: datetime) -> str:
+_ICON_SIZE = 22
+_ICON_RENDER_SCALE = 4  # draw big, downsample -- much smoother edges than drawing at 1x
+
+
+def _render_close_icon(color: str) -> ImageTk.PhotoImage:
+    size = _ICON_SIZE * _ICON_RENDER_SCALE
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    cx = cy = size / 2
+    r = size * 0.28
+    w = max(2, int(size * 0.09))
+    draw.line([cx - r, cy - r, cx + r, cy + r], fill=color, width=w)
+    draw.line([cx - r, cy + r, cx + r, cy - r], fill=color, width=w)
+    return ImageTk.PhotoImage(img.resize((_ICON_SIZE, _ICON_SIZE), Image.LANCZOS))
+
+
+def _render_refresh_icon(color: str) -> ImageTk.PhotoImage:
+    size = _ICON_SIZE * _ICON_RENDER_SCALE
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    cx = cy = size / 2
+    r = size * 0.34
+    w = max(2, int(size * 0.09))
+    end_deg = 250
+    draw.arc([cx - r, cy - r, cx + r, cy + r], start=-40, end=end_deg, fill=color, width=w)
+    angle = math.radians(end_deg)
+    tip_x, tip_y = cx + r * math.cos(angle), cy + r * math.sin(angle)
+    ah = size * 0.16
+    draw.polygon(
+        [(tip_x, tip_y), (tip_x - ah, tip_y - ah * 0.3), (tip_x - ah * 0.2, tip_y + ah)],
+        fill=color,
+    )
+    return ImageTk.PhotoImage(img.resize((_ICON_SIZE, _ICON_SIZE), Image.LANCZOS))
+
+
+def _icon_button(parent: tk.Widget, photo: ImageTk.PhotoImage, on_click) -> tk.Label:
+    """A small icon button drawn as a bitmap (via Pillow) rather than a text
+    glyph -- symbols like "X" and a refresh arrow aren't reliably present in
+    every font, and rendered as blank/tofu boxes on some machines depending
+    on the OS's fallback font. A bitmap always looks the same everywhere."""
+    label = tk.Label(parent, image=photo, bg=_PANEL_BG, cursor="hand2", bd=0, padx=6, pady=4)
+    label.image = photo  # keep a reference -- Tk doesn't, and would garbage-collect it
+    label.bind("<Button-1>", lambda e: on_click())
+    return label
+
+
+def _reset_status_text(reset_at: Optional[datetime]) -> str:
+    """The API returns no reset time for a window with no usage yet (e.g.
+    right after a 5-hour session resets, before the next message is sent)."""
+    if reset_at is None:
+        return "아직 사용 시작 전"
     delta = reset_at - datetime.now()
     total_minutes = max(int(delta.total_seconds()) // 60, 0)
     days, remainder = divmod(total_minutes, 24 * 60)
     hours, minutes = divmod(remainder, 60)
     if days:
-        return f"{days}일 {hours}시간 후"
-    return f"{hours}시간 {minutes}분 후"
+        return f"리셋까지 {days}일 {hours}시간 후"
+    return f"리셋까지 {hours}시간 {minutes}분 후"
 
 
-def _add_usage_row(parent: tk.Widget, row: int, title: str, percent: int, reset_at: datetime) -> dict:
+def _add_usage_row(parent: tk.Widget, row: int, title: str, percent: int, reset_at: Optional[datetime]) -> dict:
     percent_color = _rgb_to_hex(color_for_percent(percent))
 
     tk.Label(parent, text=title, font=_font(12, bold=True), bg=_PANEL_BG).grid(
@@ -137,7 +190,7 @@ def _add_usage_row(parent: tk.Widget, row: int, title: str, percent: int, reset_
     bar_canvas.grid(column=0, row=row + 1, columnspan=2, sticky="ew", pady=(10, 6))
     reset_label = tk.Label(
         parent,
-        text=f"리셋까지 {_format_remaining(reset_at)}",
+        text=_reset_status_text(reset_at),
         font=_font(10),
         fg=_MUTED_TEXT,
         bg=_PANEL_BG,
@@ -147,10 +200,10 @@ def _add_usage_row(parent: tk.Widget, row: int, title: str, percent: int, reset_
     return {"percent_label": percent_label, "bar_canvas": bar_canvas, "reset_label": reset_label}
 
 
-def _update_usage_row(refs: dict, percent: int, reset_at: datetime) -> None:
+def _update_usage_row(refs: dict, percent: int, reset_at: Optional[datetime]) -> None:
     refs["percent_label"].config(text=f"{percent}%", fg=_rgb_to_hex(color_for_percent(percent)))
     _draw_progress_fill(refs["bar_canvas"], percent)
-    refs["reset_label"].config(text=f"리셋까지 {_format_remaining(reset_at)}")
+    refs["reset_label"].config(text=_reset_status_text(reset_at))
 
 
 def _make_draggable(handle: tk.Widget, window: tk.Toplevel) -> None:
@@ -256,11 +309,8 @@ def _new_panel(
     header.grid(column=0, row=0, sticky="ew", padx=20, pady=(16, 4))
     header.grid_columnconfigure(0, weight=1)
     tk.Label(header, text=title, font=_font(13, bold=True), bg=_PANEL_BG).grid(column=0, row=0, sticky="w")
-    close_btn = tk.Label(
-        header, text="✕", font=_font(11), bg=_PANEL_BG, fg=_MUTED_TEXT, cursor="hand2", padx=6, pady=4
-    )
+    close_btn = _icon_button(header, _render_close_icon(_MUTED_TEXT), window.destroy)
     close_btn.grid(column=2, row=0, sticky="e")
-    close_btn.bind("<Button-1>", lambda e: window.destroy())
     _make_draggable(header, window)
 
     body = tk.Frame(panel, bg=_PANEL_BG)
@@ -291,10 +341,10 @@ def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
     week_refs = _add_usage_row(body, 4, "주간", usage.week_percent, usage.week_reset_at)
 
     if on_refresh is not None:
-        refresh_btn = tk.Label(
-            header, text="⟳", font=_font(13), bg=_PANEL_BG, fg=_MUTED_TEXT, cursor="hand2", padx=6, pady=4
-        )
-        refresh_btn.grid(column=1, row=0, sticky="e")
+        def set_refresh_color(color: str) -> None:
+            photo = _render_refresh_icon(color)
+            refresh_btn.config(image=photo)
+            refresh_btn.image = photo
 
         def on_done(new_usage: UsageData | None) -> None:
             if not window.winfo_exists():
@@ -302,21 +352,22 @@ def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
             if new_usage is None:
                 # briefly flash red so a failed refresh doesn't look like
                 # nothing happened, then settle back to the normal look
-                refresh_btn.config(fg="#e04b4b", cursor="hand2")
+                set_refresh_color("#e04b4b")
                 window.after(
                     1500,
-                    lambda: refresh_btn.config(fg=_MUTED_TEXT) if window.winfo_exists() else None,
+                    lambda: set_refresh_color(_MUTED_TEXT) if window.winfo_exists() else None,
                 )
                 return
             _update_usage_row(session_refs, new_usage.session_percent, new_usage.session_reset_at)
             _update_usage_row(week_refs, new_usage.week_percent, new_usage.week_reset_at)
-            refresh_btn.config(fg=_MUTED_TEXT, cursor="hand2")
+            set_refresh_color(_MUTED_TEXT)
 
-        def do_refresh(event=None):
-            refresh_btn.config(fg="#c0c0c0", cursor="")
+        def do_refresh() -> None:
+            set_refresh_color("#c0c0c0")
             on_refresh(on_done)
 
-        refresh_btn.bind("<Button-1>", do_refresh)
+        refresh_btn = _icon_button(header, _render_refresh_icon(_MUTED_TEXT), do_refresh)
+        refresh_btn.grid(column=1, row=0, sticky="e")
 
     window.wait_window()
 

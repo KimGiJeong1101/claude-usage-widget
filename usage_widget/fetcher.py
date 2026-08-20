@@ -10,6 +10,7 @@ load while still getting through Cloudflare.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Optional
 
 from playwright.sync_api import sync_playwright
 
@@ -26,13 +27,18 @@ class SessionExpiredError(Exception):
 class UsageData:
     session_percent: int
     week_percent: int
-    session_reset_at: datetime
-    week_reset_at: datetime
+    session_reset_at: Optional[datetime]
+    week_reset_at: Optional[datetime]
 
 
-def _parse_reset_at(iso_string: str) -> datetime:
+def _parse_reset_at(iso_string: Optional[str]) -> Optional[datetime]:
     """Convert an API timestamp (UTC, e.g. "...+00:00") to a naive local
-    datetime, matching the naive datetime.now() used elsewhere (popup.py)."""
+    datetime, matching the naive datetime.now() used elsewhere (popup.py).
+    The API returns null for a window with no usage yet (e.g. right after
+    a 5-hour session resets, before the next message is sent) -- that's
+    passed through as None rather than a countdown."""
+    if iso_string is None:
+        return None
     return datetime.fromisoformat(iso_string).astimezone().replace(tzinfo=None)
 
 
