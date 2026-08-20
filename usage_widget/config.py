@@ -1,9 +1,10 @@
-"""User-editable settings (currently just the refresh interval)."""
+"""User-editable settings (refresh interval, tray icon style)."""
 
 import json
 from dataclasses import asdict, dataclass
 
 from usage_widget.paths import config_path
+from usage_widget.tray_icon import DEFAULT_STYLE as DEFAULT_TRAY_ICON_STYLE
 
 DEFAULT_REFRESH_SECONDS = 60
 
@@ -11,6 +12,7 @@ DEFAULT_REFRESH_SECONDS = 60
 @dataclass
 class Config:
     refresh_seconds: int = DEFAULT_REFRESH_SECONDS
+    tray_icon_style: str = DEFAULT_TRAY_ICON_STYLE
 
     @classmethod
     def load(cls) -> "Config":

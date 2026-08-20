@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageTk
 from usage_widget import fonts
 from usage_widget.config import Config
 from usage_widget.fetcher import UsageData
-from usage_widget.tray_icon import color_for_percent
+from usage_widget.tray_icon import DEFAULT_STYLE, STYLE_LABELS, color_for_percent
 
 _MUTED_TEXT = "#8a8a8a"
 _TROUGH_COLOR = "#e4e4e4"
@@ -30,7 +30,7 @@ _KEY_COLOR = "#0a1a2a"  # arbitrary color used as the Windows "transparent" key
 _FLYOUT_WIDTH = 320
 _FLYOUT_HEIGHT = 260
 _SETTINGS_WIDTH = 280
-_SETTINGS_HEIGHT = 190
+_SETTINGS_HEIGHT = 300
 _CURSOR_GAP = 24  # how far inside the flyout's near edge the cursor lands
 
 _IS_WINDOWS = sys.platform == "win32"
@@ -413,7 +413,10 @@ def show_usage_popup(usage: UsageData, on_refresh=None) -> None:
     window.wait_window()
 
 
-def show_settings_popup() -> None:
+def show_settings_popup(on_saved=None) -> None:
+    """on_saved, if given, is called right after a successful save -- lets
+    main.py refresh the tray icon immediately instead of waiting for the
+    next scheduled tick (up to refresh_seconds later)."""
     config = Config.load()
     sv_ttk.set_theme("light")
     window, _header, body, _close_active = _new_panel("설정", _SETTINGS_WIDTH, _SETTINGS_HEIGHT, position="center")
@@ -432,15 +435,26 @@ def show_settings_popup() -> None:
         body, text="예: 900초 = 15분", font=_font(9), fg=_MUTED_TEXT, bg=_PANEL_BG
     ).grid(column=0, row=2, columnspan=2, sticky="w")
 
+    tk.Label(body, text="트레이 아이콘 스타일", font=_font(12, bold=True), bg=_PANEL_BG).grid(
+        column=0, row=3, columnspan=2, sticky="w", pady=(16, 0)
+    )
+    label_by_style = STYLE_LABELS
+    style_by_label = {label: style for style, label in STYLE_LABELS.items()}
+    style_var = tk.StringVar(value=label_by_style.get(config.tray_icon_style, label_by_style[DEFAULT_STYLE]))
+    ttk.Combobox(
+        body, textvariable=style_var, values=list(STYLE_LABELS.values()), state="readonly", font=_font(10)
+    ).grid(column=0, row=4, columnspan=2, sticky="ew", pady=(8, 0))
+
     def on_save():
         config.refresh_seconds = interval_var.get()
+        config.tray_icon_style = style_by_label.get(style_var.get(), DEFAULT_STYLE)
         config.save()
-        # TODO: re-register the OS scheduler task (schtasks / launchd)
-        # with the new interval -- see plan doc section 5.
         window.destroy()
+        if on_saved is not None:
+            on_saved()
 
     ttk.Button(body, text="저장", command=on_save).grid(
-        column=0, row=3, columnspan=2, sticky="ew", pady=(16, 0)
+        column=0, row=5, columnspan=2, sticky="ew", pady=(16, 0)
     )
 
     window.wait_window()

@@ -31,7 +31,8 @@ def _update_icon(icon: pystray.Icon) -> None:
     a failure note in the tray tooltip -- otherwise a dead background
     thread (e.g. after a declined re-login) would leave the icon frozen
     on stale data with no visible sign anything is wrong."""
-    icon.icon = build_icon_image(_latest_usage.session_percent)
+    style = Config.load().tray_icon_style
+    icon.icon = build_icon_image(_latest_usage.session_percent, _latest_usage.week_percent, style=style)
     icon.title = _TOOLTIP if _last_error is None else f"{_TOOLTIP} (갱신 실패, 재시도 중)"
 
 
@@ -91,7 +92,7 @@ def _on_open(icon: pystray.Icon, item) -> None:
 
 
 def _on_settings(icon: pystray.Icon, item) -> None:
-    get_gui_root().after(0, show_settings_popup)
+    get_gui_root().after(0, lambda: show_settings_popup(on_saved=lambda: _update_icon(icon)))
 
 
 def _on_quit(icon: pystray.Icon, item) -> None:
@@ -119,7 +120,9 @@ def run() -> None:
     )
     icon = pystray.Icon(
         "claude-usage-widget",
-        build_icon_image(_latest_usage.session_percent),
+        build_icon_image(
+            _latest_usage.session_percent, _latest_usage.week_percent, style=Config.load().tray_icon_style
+        ),
         _TOOLTIP,
         menu,
     )
