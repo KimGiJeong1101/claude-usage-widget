@@ -4,41 +4,94 @@
 
 **claude.ai 세션 / 주간 사용량을, 창을 열어보지 않고도 트레이 아이콘 한 번의 시선으로**
 
-[![Latest Release](https://img.shields.io/github/v/release/KimGiJeong1101/claude-usage-widget?label=release&color=4a9eff)](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest)
-[![Build](https://github.com/KimGiJeong1101/claude-usage-widget/actions/workflows/release.yml/badge.svg)](https://github.com/KimGiJeong1101/claude-usage-widget/actions/workflows/release.yml)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-6e6e6e)](#-다운로드)
-[![Python](https://img.shields.io/badge/python-3.10%2B-3776ab)](pyproject.toml)
+[![Latest Release](https://img.shields.io/github/v/release/KimGiJeong1101/claude-usage-widget?label=release&color=4a9eff&style=flat-square)](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/KimGiJeong1101/claude-usage-widget/release.yml?label=build&style=flat-square)](https://github.com/KimGiJeong1101/claude-usage-widget/actions/workflows/release.yml)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-6e6e6e?style=flat-square)](#-다운로드)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
 
-<img src="docs/screenshot.png" width="440" alt="Claude Usage Widget 사용량 팝업 목업">
+<br>
+
+<img src="docs/screenshot.png" width="420" alt="Claude Usage Widget 사용량 팝업">
 
 </div>
 
 <br>
 
-## 목차
-
-- [특징](#-특징)
-- [미리보기](#-미리보기)
-- [다운로드](#-다운로드)
-- [사용법](#사용법)
-- [개발자용](#-개발자용)
-- [참고](#참고)
+<p align="center">
+  <a href="#-특징">특징</a> •
+  <a href="#-미리보기">미리보기</a> •
+  <a href="#-다운로드">다운로드</a> •
+  <a href="#사용법">사용법</a> •
+  <a href="#-개발자용">개발자용</a> •
+  <a href="#참고">참고</a>
+</p>
 
 <br>
 
 ## ✨ 특징
 
-|  |  |
-| --- | --- |
-| 🟢 **실시간 트레이 게이지** | 세션(5시간) 사용량이 트레이 아이콘에 항상 표시됩니다. 클릭 한 번으로 세션 / 주간 상세 팝업 |
-| 📌 **팝업 고정** | 기본은 마우스가 벗어나면 자동으로 닫히고, 고정 버튼으로 계속 띄워둘 수 있습니다 |
-| 🪟 **독립적인 다중 팝업** | 사용량 / 설정 / 계정 팝업을 동시에 여러 개 띄워둘 수 있습니다 (하나가 다른 하나를 닫지 않음) |
-| 🔄 **즉시 새로고침** | 갱신 주기를 기다리지 않고 팝업에서 바로 최신 데이터를 가져옵니다 |
-| 🎨 **트레이 아이콘 스타일 5종** | 도넛 게이지 / 배터리 / 막대 / 숫자 / 원형 채움 중 취향대로 선택 (설정에서 변경) |
-| 👤 **계정 관리** | 현재 로그인된 계정 확인, 다른 계정으로 전환, 로그아웃(로그아웃 중엔 추적을 완전히 멈춤) |
-| 🚀 **Windows 자동 시작** | PC 켤 때 자동 실행 여부를 설정에서 켜고 끌 수 있습니다 |
-| 🔐 **최초 1회 로그인** | 이후엔 세션이 자동 유지되어, 재부팅해도 다시 로그인할 필요가 없습니다 |
-| 🪟🍎 **Windows / macOS 지원** | 하나의 코드베이스로 두 플랫폼 빌드를 제공합니다 |
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 🟢 실시간 트레이 게이지
+세션(5시간) 사용량이 트레이 아이콘에 항상 표시됩니다. 클릭 한 번으로 세션 / 주간 상세 팝업까지.
+
+</td>
+<td width="33%" valign="top">
+
+### 🪟 독립적인 다중 팝업
+사용량 / 설정 / 계정 팝업을 동시에 여러 개 띄워둘 수 있습니다. 하나가 다른 하나를 닫지 않아요.
+
+</td>
+<td width="33%" valign="top">
+
+### 📌 팝업 고정
+기본은 마우스가 벗어나면 자동으로 닫히고, 고정 버튼 하나로 계속 띄워둘 수 있습니다.
+
+</td>
+</tr>
+<tr>
+<td width="33%" valign="top">
+
+### 🔄 즉시 새로고침
+갱신 주기를 기다릴 필요 없이, 팝업에서 버튼 한 번으로 바로 최신 데이터를 가져옵니다.
+
+</td>
+<td width="33%" valign="top">
+
+### 🎨 트레이 아이콘 5종
+도넛 게이지 / 배터리 / 막대 / 숫자 / 원형 채움 중 취향대로. 설정에서 바로 바꿀 수 있어요.
+
+</td>
+<td width="33%" valign="top">
+
+### 👤 계정 관리
+로그인된 계정 확인, 다른 계정으로 전환, 로그아웃(로그아웃 중엔 추적을 완전히 멈춤).
+
+</td>
+</tr>
+<tr>
+<td width="33%" valign="top">
+
+### 🚀 자동 시작
+PC를 켤 때 자동으로 실행할지 여부를 설정에서 켜고 끌 수 있습니다 (Windows).
+
+</td>
+<td width="33%" valign="top">
+
+### 🔐 최초 1회 로그인
+이후엔 세션이 자동으로 유지돼서, 재부팅해도 다시 로그인할 필요가 없습니다.
+
+</td>
+<td width="33%" valign="top">
+
+### 🪟🍎 크로스플랫폼
+하나의 코드베이스로 Windows / macOS 빌드를 모두 제공합니다.
+
+</td>
+</tr>
+</table>
 
 <br>
 
@@ -46,13 +99,24 @@
 
 <div align="center">
 
-<img src="docs/screenshot.png" width="300" alt="사용량 팝업"><br>
+<img src="docs/screenshot.png" width="300" alt="사용량 팝업">
+
 <sub>사용량 팝업 — 클릭 위치 근처에 뜨고, 📌로 고정하지 않으면 마우스가 벗어날 때 자동으로 닫힙니다</sub>
 
 <br><br>
 
-<img src="docs/screenshot-settings.png" width="260" alt="설정 팝업">　<img src="docs/screenshot-account.png" width="260" alt="계정 팝업"><br>
-<sub>설정 (갱신 주기 / 트레이 아이콘 스타일 / 자동 실행)　　　　계정 (로그인 상태 확인 / 전환 / 로그아웃)</sub>
+<table>
+<tr>
+<td align="center" width="50%">
+<img src="docs/screenshot-settings.png" width="260" alt="설정 팝업"><br>
+<sub>설정 — 갱신 주기 / 트레이 아이콘 스타일 / 자동 실행</sub>
+</td>
+<td align="center" width="50%">
+<img src="docs/screenshot-account.png" width="260" alt="계정 팝업"><br>
+<sub>계정 — 로그인 상태 확인 / 전환 / 로그아웃</sub>
+</td>
+</tr>
+</table>
 
 </div>
 
@@ -62,17 +126,21 @@
 
 Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항상 **최신 릴리즈**를 가리킵니다.
 
+<div align="center">
+
 | OS | 형식 | 다운로드 |
-| --- | --- | --- |
-| Windows | 설치형 (.msi) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget.msi)** |
-| Windows | 포터블 (.zip, 설치 없이 실행) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-win.zip)** |
-| macOS | 디스크 이미지 (.dmg) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.dmg)** |
+| :---: | :---: | :---: |
+| 🪟 Windows | 설치형 (.msi) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget.msi)** |
+| 🪟 Windows | 포터블 (.zip) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-win.zip)** |
+| 🍎 macOS | 디스크 이미지 (.dmg) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.dmg)** |
+
+</div>
 
 > [!WARNING]
 > **macOS 빌드는 아직 실제 Mac에서 동작 검증이 되지 않았습니다.** GitHub Actions로 macOS 러너에서 빌드는 되지만, 실사용 테스트 전이라 다운로드해도 정상적으로 실행되지 않을 수 있습니다. macOS에서 문제를 겪으셨다면 이슈로 알려주세요.
 
 <details>
-<summary>실행 시 경고가 뜬다면?</summary>
+<summary><b>실행 시 경고가 뜬다면?</b></summary>
 <br>
 
 코드 서명이 안 된 빌드라 아래 경고가 뜰 수 있습니다 — 정상입니다.
@@ -102,7 +170,7 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 ## 🛠️ 개발자용
 
 <details>
-<summary>동작 방식 (자세히 보기)</summary>
+<summary><b>동작 방식 (자세히 보기)</b></summary>
 <br>
 
 - claude.ai는 이 사용량 정보를 가져올 수 있는 공식 공개 API를 제공하지 않습니다.
@@ -129,7 +197,7 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 </details>
 
 <details>
-<summary>소스에서 직접 실행하기</summary>
+<summary><b>소스에서 직접 실행하기</b></summary>
 <br>
 
 **요구 사항**: Python 3.10+, Google Chrome (로그인 시 실제 Chrome 채널을 사용합니다)
@@ -146,7 +214,7 @@ python -m usage_widget.main
 </details>
 
 <details>
-<summary>배포용 실행 파일 직접 빌드하기 (Windows)</summary>
+<summary><b>배포용 실행 파일 직접 빌드하기 (Windows)</b></summary>
 <br>
 
 ```bash
@@ -169,3 +237,9 @@ push하면 GitHub Actions가 Windows/macOS 빌드를 자동으로 만들어 릴�
 - 자기 자신의 claude.ai 계정으로만 사용하도록 설계되어 있습니다.
 - UI 폰트로 [Pretendard](https://github.com/orioncactus/pretendard)(SIL OFL 1.1 라이선스, `usage_widget/assets/fonts/LICENSE` 참고)를 번들로 포함합니다.
   웹뷰 안에서 CSS `@font-face`로 직접 로드하는 방식이라 별도 OS 등록 없이 Windows/macOS/Linux 어디서나 동일하게 표시됩니다.
+
+<br>
+
+<div align="center">
+<sub>Built for N2SOFT-AX</sub>
+</div>
