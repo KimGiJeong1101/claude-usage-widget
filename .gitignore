@@ -19,6 +19,8 @@ dist/
 *.dmg
 .wix/
 
-# personal/internal planning notes -- not meant for the public repo
+# personal/internal planning notes -- not meant for the public repo.
+# notes/ is its own separate git repository (nested), synced to a private
+# GitHub repo instead of this public one -- see DEVELOPMENT.md.
 HANDOFF.md
-claude-usage-widget-plan.md
+notes/

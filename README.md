@@ -211,6 +211,9 @@ playwright install chromium
 python -m usage_widget.main
 ```
 
+다른 PC에서 이어서 개발할 때 필요한 세팅(로그인 세션 저장 위치, 웹 UI 미리보기 팁 등)은
+[DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
+
 </details>
 
 <details>
