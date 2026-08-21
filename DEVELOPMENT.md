@@ -96,6 +96,60 @@ pywebview 창 없이 **브라우저에서 그냥 파일을 직접 열어도** �
 
 [README.md의 "배포용 실행 파일 직접 빌드하기"](README.md#-개발자용) 섹션을 참고하세요.
 
+## 9. 일상적인 git 작업 흐름 (여러 PC 오갈 때)
+
+이 폴더 안에는 **완전히 독립된 git 저장소가 2개** 있다는 걸 항상 기억하세요:
+
+| 저장소 | 위치 | 성격 |
+| --- | --- | --- |
+| `claude-usage-widget` | 프로젝트 루트 (`usage_widget/`) | 공개, 코드/README 등 |
+| `claude-usage-widget-notes` | `notes/` 하위 폴더 | 비공개, 기획 메모(`claude-usage-widget-plan.md`) |
+
+`notes/`는 바깥쪽 저장소가 완전히 무시(`.gitignore`)하고 있어서, 코드 쪽에서
+`git add -A`/`git commit`을 해도 `notes/` 안의 변경사항은 전혀 영향을 안 받습니다.
+**즉, 코드를 커밋하는 것과 메모를 커밋하는 건 완전히 별개의 작업**이고, 각자 자기
+폴더 안에서 명령을 실행해야 합니다.
+
+### 작업 시작할 때 (PC를 바꿔서 앉았을 때)
+
+```bash
+git pull                 # 프로젝트 루트에서 — 코드 최신화
+cd notes && git pull && cd ..   # 메모도 최신화
+```
+
+두 개 다 받아야 다른 PC에서 마지막으로 고친 내용을 놓치지 않습니다.
+
+### 작업 끝내고 PC를 옮길 때
+
+코드를 고쳤다면:
+
+```bash
+git add -A
+git commit -m "무엇을 왜 고쳤는지"
+git push
+```
+
+`notes/claude-usage-widget-plan.md`를 고쳤다면 (별도로):
+
+```bash
+cd notes
+git add -A
+git commit -m "무엇을 업데이트했는지"
+git push
+cd ..
+```
+
+둘 다 고쳤다면 두 저장소 모두 커밋·푸시해야, 다음에 다른 PC에서 앉았을 때 위
+"작업 시작할 때" 단계에서 전부 받아집니다.
+
+### 팁
+
+- 혼자 쓰는 저장소라 브랜치/PR 없이 그냥 `main`에 바로 커밋해도 무방합니다.
+- 뭘 커밋하려는지 헷갈리면 `git status`를 먼저 찍어보세요 — 코드 쪽 저장소에서
+  찍으면 `notes/`는 아예 안 보이는 게 정상입니다(무시되고 있으니까).
+- `.venv/`, 로그인 세션(`session_state.json`), 설정(`config.json`)은 애초에
+  저장소 안에 없거나 `.gitignore`로 막혀 있어서 신경 쓸 필요 없습니다 (5번 참고).
+
 ## 자주 막히는 지점
 
 - **로그인 창에서 계속 "사람인지 확인" 챌린지가 반복됨**: Google Chrome이 설치돼
