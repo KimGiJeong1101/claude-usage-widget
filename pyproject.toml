@@ -9,7 +9,7 @@ dependencies = [
     "playwright>=1.40",
     "httpx>=0.27",
     "platformdirs>=4.0",
-    "sv-ttk>=2.6",
+    "pywebview>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -23,4 +23,4 @@ build-backend = "setuptools.build_meta"
 include = ["usage_widget*"]
 
 [tool.setuptools.package-data]
-usage_widget = ["assets/fonts/*.otf", "assets/fonts/LICENSE"]
+usage_widget = ["assets/fonts/*.otf", "assets/fonts/LICENSE", "assets/web/*"]

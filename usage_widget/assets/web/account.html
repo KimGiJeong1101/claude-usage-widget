@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="common.css">
+<style>
+  #status-label { margin: 0; }
+  #status-value { margin: 6px 0 0; font-size: 13.5px; font-weight: 600; line-height: 1.4; word-break: break-all; }
+  .actions { display: flex; flex-direction: column; gap: 10px; }
+  #logout-btn:hover { background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3); color: var(--red); }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <div class="header">
+      <div class="icon-chip">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="8" r="4"></circle>
+          <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"></path>
+        </svg>
+      </div>
+      <div class="title">계정</div>
+      <button class="icon-btn tone-danger" id="btn-close" title="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="body">
+      <div class="card">
+        <p class="field-label" id="status-label">현재 로그인</p>
+        <p id="status-value">확인 중...</p>
+      </div>
+      <div class="actions">
+        <button class="primary" id="switch-btn">계정 변경</button>
+        <button class="secondary" id="logout-btn" style="display: none;">로그아웃</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  document.getElementById("btn-close").addEventListener("click", () => {
+    window.pywebview.api.close();
+  });
+  document.getElementById("switch-btn").addEventListener("click", () => {
+    window.pywebview.api.switch_account();
+    window.pywebview.api.close();
+  });
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    window.pywebview.api.logout();
+    window.pywebview.api.close();
+  });
+
+  window.addEventListener("pywebviewready", async () => {
+    const data = await window.pywebview.api.get_initial_data();
+    document.getElementById("status-label").textContent = data.is_logged_out ? "현재 상태" : "현재 로그인";
+    document.getElementById("status-value").textContent = data.is_logged_out
+      ? "로그아웃됨"
+      : (data.email || "확인 중...");
+    document.getElementById("switch-btn").textContent = data.is_logged_out ? "로그인" : "계정 변경";
+    if (!data.is_logged_out) {
+      document.getElementById("logout-btn").style.display = "";
+    }
+  });
+</script>
+</body>
+</html>

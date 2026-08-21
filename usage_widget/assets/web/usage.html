@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="common.css">
+<style>
+  .usage-card {
+    padding: 18px;
+    border-left: 4px solid var(--severity, var(--card-border));
+    background: linear-gradient(120deg, var(--severity-wash, transparent), var(--card-bg) 55%);
+    transition: border-color 0.3s ease, background 0.3s ease;
+  }
+  .usage-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .usage-info { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .usage-title { font-size: 13px; font-weight: 600; letter-spacing: -0.1px; }
+  .usage-reset { line-height: 1.4; }
+  .ring { position: relative; width: 96px; height: 96px; flex: none; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+  .ring-track { fill: none; stroke: #edeef1; stroke-width: 12; }
+  .ring-fill {
+    fill: none;
+    stroke-width: 12;
+    stroke-linecap: round;
+    filter: drop-shadow(0 1px 2px rgba(20, 20, 30, 0.12));
+    transition: stroke-dashoffset 0.7s cubic-bezier(0.22, 1, 0.36, 1), stroke 0.3s ease;
+  }
+  .ring-percent {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <div class="header">
+      <div class="icon-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="6" y1="20" x2="6" y2="14"/>
+          <line x1="12" y1="20" x2="12" y2="8"/>
+          <line x1="18" y1="20" x2="18" y2="4"/>
+        </svg>
+      </div>
+      <div class="title">Claude 사용량</div>
+      <button class="icon-btn tone-accent" id="btn-pin" title="고정">
+        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path id="pin-path" d="M12 21s7-7.58 7-12A7 7 0 105 9c0 4.42 7 12 7 12z" fill="none"/>
+          <circle cx="12" cy="9" r="2.1" fill="currentColor" stroke="none"/>
+        </svg>
+      </button>
+      <button class="icon-btn tone-accent" id="btn-refresh" title="새로고침">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 11-3-6.7"/>
+          <polyline points="21 3 21 9 15 9"/>
+        </svg>
+      </button>
+      <button class="icon-btn tone-danger" id="btn-close" title="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="body">
+      <div class="card usage-card" data-key="session">
+        <div class="usage-row">
+          <div class="usage-info">
+            <div class="usage-title">세션 (5시간)</div>
+            <div class="usage-reset muted"></div>
+          </div>
+          <div class="ring">
+            <svg viewBox="0 0 100 100">
+              <circle class="ring-track" cx="50" cy="50" r="42"></circle>
+              <circle class="ring-fill" cx="50" cy="50" r="42"></circle>
+            </svg>
+            <div class="ring-percent">0%</div>
+          </div>
+        </div>
+      </div>
+      <div class="card usage-card" data-key="week">
+        <div class="usage-row">
+          <div class="usage-info">
+            <div class="usage-title">주간</div>
+            <div class="usage-reset muted"></div>
+          </div>
+          <div class="ring">
+            <svg viewBox="0 0 100 100">
+              <circle class="ring-track" cx="50" cy="50" r="42"></circle>
+              <circle class="ring-fill" cx="50" cy="50" r="42"></circle>
+            </svg>
+            <div class="ring-percent">0%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const CIRC = 2 * Math.PI * 42;
+  const colorVar = (p) => (p >= 90 ? "--red" : p >= 70 ? "--yellow" : "--green");
+  const cardFor = (key) => document.querySelector(`.card[data-key="${key}"]`);
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.replace("#", ""), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function paintRing(key, percent, animate) {
+    const card = cardFor(key);
+    const fill = card.querySelector(".ring-fill");
+    const percentLabel = card.querySelector(".ring-percent");
+    const p = Math.max(0, Math.min(100, percent));
+    const color = getComputedStyle(document.documentElement).getPropertyValue(colorVar(p)).trim();
+    const [r, g, b] = hexToRgb(color);
+    const offset = CIRC * (1 - p / 100);
+
+    card.style.setProperty("--severity", color);
+    card.style.setProperty("--severity-wash", `rgba(${r}, ${g}, ${b}, 0.12)`);
+
+    fill.style.transition = "none";
+    fill.style.strokeDasharray = `${CIRC}`;
+    if (!animate) {
+      fill.style.stroke = color;
+      fill.style.strokeDashoffset = `${offset}`;
+      percentLabel.textContent = `${p}%`;
+      return;
+    }
+    fill.style.strokeDashoffset = `${CIRC}`;
+    void fill.getBoundingClientRect();
+    requestAnimationFrame(() => {
+      fill.style.transition = "";
+      fill.style.stroke = color;
+      fill.style.strokeDashoffset = `${offset}`;
+    });
+    percentLabel.textContent = `${p}%`;
+  }
+
+  function paint(data, animate) {
+    paintRing("session", data.session.percent, animate);
+    cardFor("session").querySelector(".usage-reset").textContent = data.session.reset_text;
+    paintRing("week", data.week.percent, animate);
+    cardFor("week").querySelector(".usage-reset").textContent = data.week.reset_text;
+  }
+
+  let pinned = false;
+  const pinBtn = document.getElementById("btn-pin");
+  pinBtn.addEventListener("click", () => {
+    pinned = !pinned;
+    pinBtn.classList.toggle("pinned", pinned);
+    document.getElementById("pin-path").setAttribute("fill", pinned ? "currentColor" : "none");
+  });
+
+  const refreshBtn = document.getElementById("btn-refresh");
+  refreshBtn.addEventListener("click", async () => {
+    if (refreshBtn.classList.contains("spinning")) return;
+    refreshBtn.classList.add("spinning");
+    try {
+      const data = await window.pywebview.api.refresh();
+      if (data) {
+        paint(data, false);
+      } else {
+        refreshBtn.style.color = "var(--red)";
+        setTimeout(() => (refreshBtn.style.color = ""), 1200);
+      }
+    } finally {
+      refreshBtn.classList.remove("spinning");
+    }
+  });
+
+  document.getElementById("btn-close").addEventListener("click", () => {
+    window.pywebview.api.close();
+  });
+
+  document.addEventListener("mouseleave", () => {
+    if (pinned) return;
+    setTimeout(() => {
+      if (!pinned) window.pywebview.api.close();
+    }, 250);
+  });
+
+  window.addEventListener("pywebviewready", async () => {
+    const data = await window.pywebview.api.get_initial_data();
+    paint(data, true);
+  });
+</script>
+</body>
+</html>

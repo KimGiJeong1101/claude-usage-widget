@@ -1,25 +1,29 @@
 """Entry point: tray icon that stays resident, background refresh thread,
 and popups for details / settings on click.
 
-Threading: the hidden Tk root's mainloop() runs on the main thread; pystray
-runs on its own background thread. pystray's Win32 backend invokes menu
-callbacks from a low-level native message-loop context, not a normal Python
-thread -- calling tkinter directly from there (e.g. wait_window()) crashed
-the process, so callbacks only ever marshal work onto the GUI thread via
-root.after(0, ...).
+Threading: pywebview needs a window to exist before webview.start() (run on
+the main thread) will run its native event loop; pystray runs on its own
+background thread. Popup-opening callbacks are still wrapped in a small
+daemon thread rather than calling webui.show_*_popup directly from
+pystray's callback -- pystray's Win32 backend invokes menu callbacks from a
+low-level native message-loop context, and tkinter's blocking calls used to
+crash the process when called from there (see git history); pywebview's
+window creation hasn't shown that problem in testing, but the wrapping
+costs nothing and removes any doubt.
 """
 
 import threading
 import time
+from typing import Optional
 
 import pystray
 
 from usage_widget.auth import has_saved_session, login_and_save_session
 from usage_widget.config import Config
-from usage_widget.fetcher import SessionExpiredError, fetch_account_email, fetch_usage
+from usage_widget.fetcher import SessionExpiredError, UsageData, fetch_account_email, fetch_usage
 from usage_widget.paths import session_state_path
-from usage_widget.popup import get_gui_root, show_account_popup, show_settings_popup, show_usage_popup
 from usage_widget.tray_icon import build_icon_image
+from usage_widget.webui import init_gui, run_gui_loop, shutdown_gui, show_account_popup, show_settings_popup, show_usage_popup
 
 _TOOLTIP = "Claude 사용량"
 
@@ -82,26 +86,20 @@ def _refresh_loop(icon: pystray.Icon) -> None:
         time.sleep(config.refresh_seconds)
 
 
-def _manual_refresh(icon: pystray.Icon, on_done) -> None:
-    """Fetches fresh usage data on a background thread (fetch_usage() can
-    take a couple of seconds -- launches a headless browser) and marshals
-    the result back onto the GUI thread, so clicking refresh never freezes
-    the popup. on_done receives None (instead of hanging forever) if the
-    fetch fails."""
-
-    def worker():
-        global _latest_usage, _last_error
-        try:
-            _latest_usage = _fetch_with_relogin()
-            _last_error = None
-            _update_icon(icon)
-            get_gui_root().after(0, lambda: on_done(_latest_usage))
-        except Exception as exc:
-            _last_error = str(exc)
-            _update_icon(icon)
-            get_gui_root().after(0, lambda: on_done(None))
-
-    threading.Thread(target=worker, daemon=True).start()
+def _manual_refresh(icon: pystray.Icon) -> Optional[UsageData]:
+    """Fetches fresh usage data and returns it (None on failure). Safe to
+    block here: pywebview already dispatches js_api calls like this one off
+    its own UI thread, so the popup doesn't freeze while this runs."""
+    global _latest_usage, _last_error
+    try:
+        _latest_usage = _fetch_with_relogin()
+        _last_error = None
+        _update_icon(icon)
+        return _latest_usage
+    except Exception as exc:
+        _last_error = str(exc)
+        _update_icon(icon)
+        return None
 
 
 def _do_logout(icon: pystray.Icon) -> None:
@@ -147,25 +145,27 @@ def _show_account_dialog(icon: pystray.Icon) -> None:
 
 def _on_open(icon: pystray.Icon, item) -> None:
     if _logged_out:
-        get_gui_root().after(0, lambda: _show_account_dialog(icon))
+        threading.Thread(target=lambda: _show_account_dialog(icon), daemon=True).start()
         return
-    get_gui_root().after(
-        0, lambda: show_usage_popup(_latest_usage, on_refresh=lambda on_done: _manual_refresh(icon, on_done))
-    )
+    threading.Thread(
+        target=lambda: show_usage_popup(_latest_usage, on_refresh=lambda: _manual_refresh(icon)),
+        daemon=True,
+    ).start()
 
 
 def _on_settings(icon: pystray.Icon, item) -> None:
-    get_gui_root().after(0, lambda: show_settings_popup(on_saved=lambda: _update_icon(icon)))
+    threading.Thread(
+        target=lambda: show_settings_popup(on_saved=lambda: _update_icon(icon)), daemon=True
+    ).start()
 
 
 def _on_switch_account(icon: pystray.Icon, item) -> None:
-    get_gui_root().after(0, lambda: _show_account_dialog(icon))
+    threading.Thread(target=lambda: _show_account_dialog(icon), daemon=True).start()
 
 
 def _on_quit(icon: pystray.Icon, item) -> None:
     icon.stop()
-    root = get_gui_root()
-    root.after(0, root.destroy)
+    shutdown_gui()
 
 
 def _run_tray(icon: pystray.Icon) -> None:
@@ -196,12 +196,12 @@ def run() -> None:
         menu,
     )
 
-    # Create the hidden GUI root up front, on this (main) thread, before the
-    # pystray thread starts -- otherwise a pystray callback could end up
-    # creating it lazily on the wrong thread.
-    root = get_gui_root()
+    # Create the hidden root window up front, on this (main) thread, before
+    # the pystray thread starts -- pywebview requires at least one window to
+    # exist before run_gui_loop() (webview.start()) will run.
+    init_gui()
     threading.Thread(target=_run_tray, args=(icon,), daemon=True).start()
-    root.mainloop()
+    run_gui_loop()
 
 
 if __name__ == "__main__":

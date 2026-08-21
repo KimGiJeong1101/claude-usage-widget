@@ -1,0 +1,305 @@
+@font-face {
+  font-family: "Pretendard";
+  src: url("../fonts/Pretendard-Regular.otf") format("opentype");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("../fonts/Pretendard-Medium.otf") format("opentype");
+  font-weight: 500;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("../fonts/Pretendard-SemiBold.otf") format("opentype");
+  font-weight: 600;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("../fonts/Pretendard-Bold.otf") format("opentype");
+  font-weight: 700;
+}
+
+:root {
+  --bg: #ffffff;
+  --border: #e5e6ea;
+  --card-border: #eceef1;
+  --card-bg: #fbfbfc;
+  --text: #17181c;
+  --muted: #8b8d94;
+  --accent: #3b82f6;
+  --accent-hover: #2f6fe0;
+  --accent-2: #8b5cf6;
+  --green: #22b56f;
+  --yellow: #f2ad2e;
+  --red: #ef4444;
+  --danger-hover: #d94b4b;
+  --radius: 20px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-family: "Pretendard", -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+.panel {
+  position: relative;
+  background:
+    radial-gradient(130% 90% at 100% 0%, rgba(139, 92, 246, 0.08), transparent 55%),
+    radial-gradient(130% 90% at 0% 100%, rgba(59, 130, 246, 0.06), transparent 55%),
+    var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  flex: none;
+  border-bottom: 1px solid var(--card-border);
+  margin-bottom: 4px;
+}
+
+.icon-chip {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 3px 8px rgba(99, 102, 241, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.icon-chip svg {
+  width: 18px;
+  height: 18px;
+  color: #fff;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: #00000010;
+  color: var(--text);
+}
+
+.icon-btn.tone-accent:hover {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--accent);
+}
+
+.icon-btn.tone-danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--red);
+}
+
+.icon-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.icon-btn.pinned {
+  color: var(--accent);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.icon-btn.spinning svg {
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.body {
+  padding: 10px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.body::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 3px;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 2px rgba(20, 20, 30, 0.03);
+}
+
+.field-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
+.field-label::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  flex: none;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+button.primary,
+button.secondary {
+  width: 100%;
+  border-radius: 10px;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 12px 0;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+button.primary {
+  background: linear-gradient(135deg, #57a0ff, var(--accent));
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.28);
+}
+
+button.primary:hover {
+  background: linear-gradient(135deg, #4b93ff, var(--accent-hover));
+  box-shadow: 0 3px 10px rgba(59, 130, 246, 0.34);
+  transform: translateY(-1px);
+}
+
+button.secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+}
+
+button.secondary:hover {
+  background: #00000008;
+}
+
+button:active {
+  transform: scale(0.98) translateY(0);
+}
+
+input[type="text"],
+input[type="number"],
+select {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+select {
+  width: 100%;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%238b8d94'%3E%3Cpath d='M5.5 8l4.5 4.5L14.5 8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  padding-right: 30px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.checkbox-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}

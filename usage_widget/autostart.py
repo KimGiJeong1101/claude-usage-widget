@@ -5,6 +5,7 @@ Items entry) isn't implemented yet -- see claude-usage-widget-plan.md.
 """
 
 import sys
+from pathlib import Path
 
 APP_NAME = "ClaudeUsageWidget"
 _RUN_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -19,8 +20,14 @@ def _command() -> str:
     if getattr(sys, "frozen", False):
         # a PyInstaller build -- sys.executable *is* the app itself
         return f'"{sys.executable}"'
-    # running from source (dev use only; not the supported autostart path)
-    return f'"{sys.executable}" -m usage_widget.main'
+    # Running from source (dev use only; not the supported autostart path).
+    # sys.executable here is the console python.exe, which would otherwise
+    # flash a cmd window open on every login -- pythonw.exe (same install,
+    # no console subsystem) is the windowed equivalent.
+    python_exe = Path(sys.executable)
+    pythonw = python_exe.with_name("pythonw.exe")
+    exe = pythonw if pythonw.exists() else python_exe
+    return f'"{exe}" -m usage_widget.main'
 
 
 def is_enabled() -> bool:
