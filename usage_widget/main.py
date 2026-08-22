@@ -14,6 +14,7 @@ costs nothing and removes any doubt.
 
 import threading
 import time
+import webbrowser
 from typing import Optional
 
 import pystray
@@ -23,6 +24,7 @@ from usage_widget.config import Config
 from usage_widget.fetcher import SessionExpiredError, UsageData, fetch_account_email, fetch_usage
 from usage_widget.paths import session_state_path
 from usage_widget.tray_icon import build_icon_image
+from usage_widget.update_check import RELEASES_URL, check_for_update
 from usage_widget.webui import (
     init_gui,
     push_usage_update,
@@ -34,6 +36,10 @@ from usage_widget.webui import (
 )
 
 _TOOLTIP = "Claude 사용량"
+_UPDATE_CHECK_INTERVAL_SECONDS = 6 * 60 * 60
+
+_update_available_version: Optional[str] = None
+_update_notified_versions: set = set()
 
 _latest_usage = None
 _last_error = None
@@ -179,8 +185,39 @@ def _on_quit(icon: pystray.Icon, item) -> None:
     shutdown_gui()
 
 
+def _on_open_release_page(icon: pystray.Icon, item) -> None:
+    webbrowser.open(RELEASES_URL)
+
+
+def _update_menu_text(item) -> str:
+    return f"새 버전 있음 (v{_update_available_version}) — 다운로드"
+
+
+def _update_menu_visible(item) -> bool:
+    return _update_available_version is not None
+
+
+def _update_check_loop(icon: pystray.Icon) -> None:
+    """Runs independently of the usage refresh loop -- checking for a new
+    release has nothing to do with how often the user wants usage numbers
+    refreshed, so it isn't tied to config.refresh_seconds."""
+    global _update_available_version
+    while True:
+        version = check_for_update()
+        _update_available_version = version
+        if version is not None and version not in _update_notified_versions:
+            _update_notified_versions.add(version)
+            try:
+                icon.notify(f"Claude Usage Widget v{version} 다운로드", "새 버전이 나왔어요")
+            except Exception:
+                pass
+        icon.update_menu()
+        time.sleep(_UPDATE_CHECK_INTERVAL_SECONDS)
+
+
 def _run_tray(icon: pystray.Icon) -> None:
     threading.Thread(target=_refresh_loop, args=(icon,), daemon=True).start()
+    threading.Thread(target=_update_check_loop, args=(icon,), daemon=True).start()
     icon.run()
 
 
@@ -196,6 +233,7 @@ def run() -> None:
         pystray.MenuItem("열기", _on_open, default=True),
         pystray.MenuItem("설정", _on_settings),
         pystray.MenuItem("계정", _on_switch_account),
+        pystray.MenuItem(_update_menu_text, _on_open_release_page, visible=_update_menu_visible),
         pystray.MenuItem("종료", _on_quit),
     )
     icon = pystray.Icon(

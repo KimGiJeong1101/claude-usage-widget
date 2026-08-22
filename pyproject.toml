@@ -1,6 +1,6 @@
 [project]
 name = "usage-widget"
-version = "0.1.1"
+dynamic = ["version"]
 description = "Desktop tray widget showing Claude.ai session/weekly usage limits"
 requires-python = ">=3.10"
 dependencies = [
@@ -21,6 +21,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["usage_widget*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "usage_widget.__version__" }
 
 [tool.setuptools.package-data]
 usage_widget = ["assets/fonts/*.otf", "assets/fonts/LICENSE", "assets/web/*"]
