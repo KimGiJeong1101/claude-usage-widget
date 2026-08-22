@@ -33,9 +33,12 @@
       <Directory Id="ProgramMenuSubfolder" Name="Claude Usage Widget" />
     </StandardDirectory>
 
+    <StandardDirectory Id="DesktopFolder" />
+
     <Feature Id="MainFeature" Title="Claude Usage Widget" Level="1">
       <ComponentRef Id="MainExecutable" />
       <ComponentRef Id="ApplicationShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
     </Feature>
 
     <Component Id="MainExecutable" Directory="INSTALLFOLDER" Guid="a1e6c9f0-4b1a-4b2a-9b3a-1f2e3d4c5b6a">
@@ -49,6 +52,18 @@
                 WorkingDirectory="INSTALLFOLDER" />
       <RemoveFolder Id="CleanUpShortcut" Directory="ProgramMenuSubfolder" On="uninstall" />
       <RegistryValue Root="HKCU" Key="Software\ClaudeUsageWidget" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- Placed directly in DesktopFolder (not a subfolder we own), so no
+         RemoveFolder here, unlike ProgramMenuSubfolder: WiX removing the
+         tracked shortcut file on uninstall is enough; the Desktop folder
+         itself is shared and must never be targeted for removal. -->
+    <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="d4b9f2c3-7e4d-4e5d-ae6d-4c5d6e7f8091">
+      <Shortcut Id="ApplicationDesktopShortcut"
+                Name="Claude Usage Widget"
+                Target="[INSTALLFOLDER]ClaudeUsageWidget.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKCU" Key="Software\ClaudeUsageWidget" Name="DesktopShortcutInstalled" Type="integer" Value="1" KeyPath="yes" />
     </Component>
 
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
