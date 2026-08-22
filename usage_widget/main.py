@@ -45,7 +45,8 @@ def _update_icon(icon: pystray.Icon) -> None:
         return
     style = Config.load().tray_icon_style
     icon.icon = build_icon_image(_latest_usage.session_percent, _latest_usage.week_percent, style=style)
-    icon.title = _TOOLTIP if _last_error is None else f"{_TOOLTIP} (갱신 실패, 재시도 중)"
+    label = f"{_TOOLTIP} ({_latest_usage.session_percent}%)"
+    icon.title = label if _last_error is None else f"{label} (갱신 실패, 재시도 중)"
 
 
 def _fetch_with_relogin():
