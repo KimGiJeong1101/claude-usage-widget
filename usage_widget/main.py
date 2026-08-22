@@ -19,6 +19,7 @@ from typing import Optional
 
 import pystray
 
+from usage_widget import __version__
 from usage_widget.auth import has_saved_session, login_and_save_session
 from usage_widget.config import Config
 from usage_widget.fetcher import SessionExpiredError, UsageData, fetch_account_email, fetch_usage
@@ -187,31 +188,38 @@ def _on_quit(icon: pystray.Icon, item) -> None:
 
 
 _update_in_progress = False
+_update_checking = False
 
 
 def _update_menu_text(item) -> str:
-    label = "지금 업데이트" if can_self_update() else "다운로드"
+    """Always visible (not just when an update happens to be known about)
+    so there's a permanent, predictable place to see the running version
+    and check on demand, instead of a menu item that appears/disappears
+    depending on background-check timing."""
     if _update_in_progress:
         return "업데이트 적용 중..."
-    return f"새 버전 있음 (v{_update_available_version}) — {label}"
-
-
-def _update_menu_visible(item) -> bool:
-    return _update_available_version is not None
+    if _update_checking:
+        return "업데이트 확인 중..."
+    if _update_available_version is not None:
+        label = "지금 업데이트" if can_self_update() else "다운로드"
+        return f"새 버전 있음 (v{_update_available_version}) — {label}"
+    return f"현재 버전: v{__version__}"
 
 
 def _update_menu_enabled(item) -> bool:
-    return not _update_in_progress
+    return not _update_in_progress and not _update_checking
 
 
-def _on_update_click(icon: pystray.Icon, item) -> None:
+def _start_update(icon: pystray.Icon) -> None:
+    """Downloads/applies the update (Windows) or just opens the releases
+    page (everywhere else). Assumes _update_available_version is already
+    set -- callers check for/report "already latest" themselves before
+    reaching this."""
     if not can_self_update():
         webbrowser.open(RELEASES_URL)
         return
 
     global _update_in_progress
-    if _update_in_progress:
-        return
     _update_in_progress = True
     icon.update_menu()
 
@@ -231,6 +239,39 @@ def _on_update_click(icon: pystray.Icon, item) -> None:
         # "종료" menu item, or the helper waits forever.
         icon.stop()
         shutdown_gui()
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def _on_update_click(icon: pystray.Icon, item) -> None:
+    global _update_available_version, _update_checking
+
+    if _update_in_progress or _update_checking:
+        return
+
+    if _update_available_version is not None:
+        # Already known (from the periodic loop or an earlier manual
+        # check) -- go straight to applying/downloading it.
+        _start_update(icon)
+        return
+
+    # Nothing known yet: this click itself *is* the "check now" action,
+    # rather than waiting for the next periodic check.
+    _update_checking = True
+    icon.update_menu()
+
+    def worker():
+        global _update_available_version, _update_checking
+        version = check_for_update()
+        _update_checking = False
+        if version is None:
+            icon.update_menu()
+            icon.notify(f"현재 최신 버전입니다 (v{__version__})", "업데이트 확인")
+            return
+        _update_available_version = version
+        _update_notified_versions.add(version)  # skip the periodic loop's own popup for this version
+        icon.update_menu()
+        _start_update(icon)
 
     threading.Thread(target=worker, daemon=True).start()
 
@@ -273,9 +314,7 @@ def run() -> None:
         pystray.MenuItem("열기", _on_open, default=True),
         pystray.MenuItem("설정", _on_settings),
         pystray.MenuItem("계정", _on_switch_account),
-        pystray.MenuItem(
-            _update_menu_text, _on_update_click, visible=_update_menu_visible, enabled=_update_menu_enabled
-        ),
+        pystray.MenuItem(_update_menu_text, _on_update_click, enabled=_update_menu_enabled),
         pystray.MenuItem("종료", _on_quit),
     )
     icon = pystray.Icon(
