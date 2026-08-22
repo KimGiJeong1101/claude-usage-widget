@@ -29,6 +29,7 @@ jobs:
       - name: Build with PyInstaller
         run: >
           pyinstaller --onefile --windowed --name ClaudeUsageWidget
+          --icon installer/icon/ClaudeUsageWidget.ico
           --add-data "usage_widget/assets;usage_widget/assets"
           run.py
 
@@ -69,9 +70,30 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[build]"
 
+      - name: Generate macOS app icon (.icns)
+        # sips/iconutil are macOS-native, so this (like the .dmg packaging
+        # below) only runs here on the macos-latest runner -- no local Mac
+        # needed, matching the approach in claude-usage-widget-plan.md
+        # section 10.1. Source is the same master PNG used for the Windows
+        # .ico (installer/icon/app_icon.png, see scripts/generate_app_icon.py).
+        run: |
+          mkdir AppIcon.iconset
+          sips -z 16 16 installer/icon/app_icon.png --out AppIcon.iconset/icon_16x16.png
+          sips -z 32 32 installer/icon/app_icon.png --out AppIcon.iconset/icon_16x16@2x.png
+          sips -z 32 32 installer/icon/app_icon.png --out AppIcon.iconset/icon_32x32.png
+          sips -z 64 64 installer/icon/app_icon.png --out AppIcon.iconset/icon_32x32@2x.png
+          sips -z 128 128 installer/icon/app_icon.png --out AppIcon.iconset/icon_128x128.png
+          sips -z 256 256 installer/icon/app_icon.png --out AppIcon.iconset/icon_128x128@2x.png
+          sips -z 256 256 installer/icon/app_icon.png --out AppIcon.iconset/icon_256x256.png
+          sips -z 512 512 installer/icon/app_icon.png --out AppIcon.iconset/icon_256x256@2x.png
+          sips -z 512 512 installer/icon/app_icon.png --out AppIcon.iconset/icon_512x512.png
+          cp installer/icon/app_icon.png AppIcon.iconset/icon_512x512@2x.png
+          iconutil -c icns AppIcon.iconset -o installer/icon/ClaudeUsageWidget.icns
+
       - name: Build with PyInstaller
         run: >
           pyinstaller --onefile --windowed --name ClaudeUsageWidget
+          --icon installer/icon/ClaudeUsageWidget.icns
           --add-data "usage_widget/assets:usage_widget/assets"
           run.py
 
