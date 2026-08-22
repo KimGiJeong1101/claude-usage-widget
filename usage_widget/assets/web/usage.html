@@ -186,6 +186,10 @@
     const data = await window.pywebview.api.get_initial_data();
     paint(data, true);
   });
+
+  // Called from Python (webui.push_usage_update) when the background
+  // auto-refresh thread fetches new data while this popup is open.
+  window.__pushUsage = (data) => paint(data, true);
 </script>
 </body>
 </html>

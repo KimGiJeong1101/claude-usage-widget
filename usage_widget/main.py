@@ -23,7 +23,15 @@ from usage_widget.config import Config
 from usage_widget.fetcher import SessionExpiredError, UsageData, fetch_account_email, fetch_usage
 from usage_widget.paths import session_state_path
 from usage_widget.tray_icon import build_icon_image
-from usage_widget.webui import init_gui, run_gui_loop, shutdown_gui, show_account_popup, show_settings_popup, show_usage_popup
+from usage_widget.webui import (
+    init_gui,
+    push_usage_update,
+    run_gui_loop,
+    shutdown_gui,
+    show_account_popup,
+    show_settings_popup,
+    show_usage_popup,
+)
 
 _TOOLTIP = "Claude 사용량"
 
@@ -81,6 +89,7 @@ def _refresh_loop(icon: pystray.Icon) -> None:
             try:
                 _latest_usage = _fetch_with_relogin()
                 _last_error = None
+                push_usage_update(_latest_usage)
             except Exception as exc:
                 _last_error = str(exc)
             _update_icon(icon)
@@ -96,6 +105,7 @@ def _manual_refresh(icon: pystray.Icon) -> Optional[UsageData]:
         _latest_usage = _fetch_with_relogin()
         _last_error = None
         _update_icon(icon)
+        push_usage_update(_latest_usage)
         return _latest_usage
     except Exception as exc:
         _last_error = str(exc)

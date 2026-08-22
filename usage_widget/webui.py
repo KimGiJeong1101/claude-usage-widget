@@ -15,6 +15,7 @@ root.after(...).
 """
 
 import ctypes
+import json
 import sys
 import threading
 from datetime import datetime
@@ -295,6 +296,40 @@ class _UsageApi:
         self._close_fn()
 
 
+_open_usage_windows: list = []
+_open_usage_lock = threading.Lock()
+
+
+def _register_usage_window(window: webview.Window) -> None:
+    """Tracks open usage popups so push_usage_update() can reach them --
+    without this, a popup only ever shows the snapshot it was opened with
+    (or whatever the user's own refresh click fetched), so background
+    auto-refresh ticks were invisible until closed and reopened."""
+    with _open_usage_lock:
+        _open_usage_windows.append(window)
+
+    def _unregister():
+        with _open_usage_lock:
+            if window in _open_usage_windows:
+                _open_usage_windows.remove(window)
+
+    window.events.closed += _unregister
+
+
+def push_usage_update(usage: UsageData) -> None:
+    """Called by main.py after each successful background fetch so any
+    already-open usage popup reflects it immediately, instead of only on
+    the next manual refresh click."""
+    data = json.dumps(_usage_to_dict(usage))
+    with _open_usage_lock:
+        windows = list(_open_usage_windows)
+    for window in windows:
+        try:
+            window.evaluate_js(f"window.__pushUsage && window.__pushUsage({data})")
+        except Exception:
+            pass
+
+
 def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optional[UsageData]]] = None) -> None:
     """on_refresh, if given, is called with no arguments when the refresh
     button is clicked and is expected to block until fresh data is ready,
@@ -305,6 +340,7 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
     width, height = 360, 400
     window = _new_window("Claude 사용량", "usage.html", api, width, height, _position_near_cursor(width, height))
     box.append(window)
+    _register_usage_window(window)
 
 
 class _SettingsApi:
