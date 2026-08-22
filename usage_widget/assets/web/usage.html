@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <link rel="stylesheet" href="common.css">
+<script src="common.js"></script>
 <style>
   .usage-card {
     padding: 18px;
@@ -97,6 +98,11 @@
         </div>
       </div>
     </div>
+    <div class="resize-grip" title="크기 조절">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M19 13l-6 6M19 19h-4M19 19v-4"/>
+      </svg>
+    </div>
   </div>
 
 <script>
@@ -185,6 +191,7 @@
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();
     paint(data, true);
+    initResizeGrip();
   });
 
   // Called from Python (webui.push_usage_update) when the background

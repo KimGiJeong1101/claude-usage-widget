@@ -150,7 +150,7 @@ def _round_corners(window: webview.Window, radius: int = _PANEL_RADIUS) -> None:
     if not _IS_WINDOWS:
         return
 
-    def apply():
+    def apply(*_args):
         try:
             hwnd = window.native.Handle.ToInt32()
             scale = ctypes.windll.user32.GetDpiForWindow(hwnd) / 96.0
@@ -162,6 +162,11 @@ def _round_corners(window: webview.Window, radius: int = _PANEL_RADIUS) -> None:
             pass
 
     window.events.shown += apply
+    # The resize grip (see resize_by()/common.js) changes window.native.Size
+    # at runtime, same as an OS-driven resize would -- reapply the clip so
+    # the rounded corners keep matching the new size instead of clipping to
+    # the size the window was first shown at.
+    window.events.resized += apply
 
 
 # pywebview's WinForms backend sets Form.Size *before* switching
@@ -245,6 +250,32 @@ def _box_closer(box: list) -> Callable[[], None]:
     return lambda: box and _safe_destroy(box[0])
 
 
+_MIN_POPUP_SIZE = (260, 220)
+
+
+def _box_resizer(box: list, size: list) -> Callable[[float, float], None]:
+    """Returns a resize callback for the drag handle in common.js
+    (window.pywebview.api.resize_by), reached the same box-closure way as
+    _box_closer -- js_api can't hold the window directly (see
+    _UsageApi's docstring). `size` is the popup's own running [width,
+    height] in logical pixels; frameless windows get no OS resize border,
+    so this is the only thing driving window.resize(), and clamping it
+    here keeps a drag from shrinking the popup smaller than its layout
+    can handle."""
+
+    def _resize(dw: float, dh: float) -> None:
+        if not box:
+            return
+        size[0] = max(_MIN_POPUP_SIZE[0], size[0] + dw)
+        size[1] = max(_MIN_POPUP_SIZE[1], size[1] + dh)
+        try:
+            box[0].resize(int(size[0]), int(size[1]))
+        except Exception:
+            pass
+
+    return _resize
+
+
 def _usage_to_dict(usage: UsageData) -> dict:
     return {
         "session": {
@@ -275,10 +306,12 @@ class _UsageApi:
         usage: UsageData,
         refresh_fn: Optional[Callable[[], Optional[UsageData]]],
         close_fn: Callable[[], None],
+        resize_fn: Callable[[float, float], None],
     ):
         self._usage = usage
         self._refresh_fn = refresh_fn
         self._close_fn = close_fn
+        self._resize_fn = resize_fn
 
     def get_initial_data(self) -> dict:
         return _usage_to_dict(self._usage)
@@ -294,6 +327,9 @@ class _UsageApi:
 
     def close(self) -> None:
         self._close_fn()
+
+    def resize_by(self, dw: float, dh: float) -> None:
+        self._resize_fn(dw, dh)
 
 
 _singleton_windows: dict = {}
@@ -348,8 +384,9 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
 
     def create() -> webview.Window:
         box: list = []
-        api = _UsageApi(usage, on_refresh, _box_closer(box))
         width, height = 360, 400
+        size = [width, height]
+        api = _UsageApi(usage, on_refresh, _box_closer(box), _box_resizer(box, size))
         window = _new_window("Claude 사용량", "usage.html", api, width, height, _position_near_cursor(width, height))
         box.append(window)
         return window
@@ -358,10 +395,17 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
 
 
 class _SettingsApi:
-    def __init__(self, config: Config, on_saved: Optional[Callable[[], None]], close_fn: Callable[[], None]):
+    def __init__(
+        self,
+        config: Config,
+        on_saved: Optional[Callable[[], None]],
+        close_fn: Callable[[], None],
+        resize_fn: Callable[[float, float], None],
+    ):
         self._config = config
         self._on_saved = on_saved
         self._close_fn = close_fn
+        self._resize_fn = resize_fn
 
     def get_initial_data(self) -> dict:
         return {
@@ -390,6 +434,9 @@ class _SettingsApi:
     def close(self) -> None:
         self._close_fn()
 
+    def resize_by(self, dw: float, dh: float) -> None:
+        self._resize_fn(dw, dh)
+
 
 def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
     """on_saved, if given, is called right after a successful save -- lets
@@ -399,8 +446,9 @@ def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
     def create() -> webview.Window:
         config = Config.load()
         box: list = []
-        api = _SettingsApi(config, on_saved, _box_closer(box))
         width, height = 340, 440
+        size = [width, height]
+        api = _SettingsApi(config, on_saved, _box_closer(box), _box_resizer(box, size))
         window = _new_window("설정", "settings.html", api, width, height, _position_centered(width, height))
         box.append(window)
         return window
@@ -411,13 +459,14 @@ def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
 class _AccountApi:
     def __init__(
         self, email: Optional[str], is_logged_out: bool, on_switch: Callable, on_logout: Callable,
-        close_fn: Callable[[], None],
+        close_fn: Callable[[], None], resize_fn: Callable[[float, float], None],
     ):
         self._email = email
         self._is_logged_out = is_logged_out
         self._on_switch = on_switch
         self._on_logout = on_logout
         self._close_fn = close_fn
+        self._resize_fn = resize_fn
 
     def get_initial_data(self) -> dict:
         return {"email": self._email, "is_logged_out": self._is_logged_out}
@@ -431,6 +480,9 @@ class _AccountApi:
     def close(self) -> None:
         self._close_fn()
 
+    def resize_by(self, dw: float, dh: float) -> None:
+        self._resize_fn(dw, dh)
+
 
 def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch: Callable, on_logout: Callable) -> None:
     """Confirms which account is currently active before doing anything
@@ -440,8 +492,9 @@ def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch: Cal
 
     def create() -> webview.Window:
         box: list = []
-        api = _AccountApi(email, is_logged_out, on_switch, on_logout, _box_closer(box))
         width, height = 320, 300
+        size = [width, height]
+        api = _AccountApi(email, is_logged_out, on_switch, on_logout, _box_closer(box), _box_resizer(box, size))
         window = _new_window("계정", "account.html", api, width, height, _position_centered(width, height))
         box.append(window)
         return window
