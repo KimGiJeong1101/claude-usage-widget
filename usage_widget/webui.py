@@ -51,6 +51,16 @@ def run_gui_loop() -> None:
 
 
 def shutdown_gui() -> None:
+    """Destroying the hidden root window is what makes pywebview's native
+    loop exit, but it doesn't touch any usage/settings/account popup that
+    happens to still be open -- those are separate windows, and being left
+    behind (visible, orphaned) after "종료" was the actual bug reported.
+    Closing them all first, before the root, is what actually clears them
+    off the screen."""
+    with _singleton_lock:
+        windows = list(_singleton_windows.values())
+    for window in windows:
+        _safe_destroy(window)
     if _root_window is not None:
         _root_window.destroy()
 
