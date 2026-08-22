@@ -10,8 +10,10 @@
     border-left: 4px solid var(--severity, var(--card-border));
     background: linear-gradient(120deg, var(--severity-wash, transparent), var(--card-bg) 55%);
     transition: border-color 0.3s ease, background 0.3s ease;
+    flex: 1;
+    display: flex;
   }
-  .usage-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .usage-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 1; }
   .usage-info { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .usage-title { font-size: 13px; font-weight: 600; letter-spacing: -0.1px; }
   .usage-reset { line-height: 1.4; }
