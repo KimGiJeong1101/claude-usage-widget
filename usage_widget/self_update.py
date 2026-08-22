@@ -30,6 +30,27 @@ this process has fully exited (the helper waits on this process's PID),
 so there's no more need for the old rename-while-running trick either:
 by the time anything touches the file, nothing still has it open.
 
+Two more bootloader-check surprises turned up after that redesign, both
+fixed here:
+
+- The relaunched exe still failed the *same* check one hop later, since
+  cmd.exe -- and anything it starts -- inherits this process's
+  environment as-is, including PyInstaller's own internal bookkeeping
+  about who spawned it. PyInstaller's docs cover exactly this case (a
+  subprocess meant to outlive the process that spawned it):
+  PYINSTALLER_RESET_ENVIRONMENT=1 in the child's environment tells its
+  bootloader to start fresh instead of validating against that stale
+  state.
+- With that fixed, a *different* bootloader error showed up: "failed to
+  obtain executable path for parent process." The batch script used to
+  call `start` and then immediately `del` itself, which let cmd.exe (the
+  new exe's actual parent, as far as Windows is concerned) finish and
+  exit within a couple hundred milliseconds -- often before the newly
+  started exe's own bootloader got around to querying its parent's
+  image path, which fails outright once that parent process is gone. A
+  short `timeout` between `start` and the self-delete keeps cmd.exe
+  alive long enough for that query to succeed.
+
 macOS's .app bundle is a directory, not a single file, so this approach
 doesn't carry over -- that's unbuilt for now.
 
@@ -76,6 +97,7 @@ if %errorlevel%==0 (
 :proceed
 move /Y "%STAGED%" "%TARGET%" >nul
 start "" "%TARGET%"
+timeout /t 2 /nobreak >nul
 del "%~f0"
 """
 
