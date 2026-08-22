@@ -26,6 +26,11 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[build]"
 
+      - name: Determine version from tag
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+
       - name: Build with PyInstaller
         run: >
           pyinstaller --onefile --windowed --name ClaudeUsageWidget
@@ -34,12 +39,14 @@ jobs:
           run.py
 
       - name: Zip the portable build
-        run: Compress-Archive -Path dist/ClaudeUsageWidget.exe -DestinationPath ClaudeUsageWidget-win.zip
-
-      - name: Determine version from tag
+        # ClaudeUsageWidget-win.zip is the stable name self_update.py and
+        # the README's "always latest" download links depend on -- it has
+        # to stay exactly that on every release. The versioned copy
+        # alongside it is just so a human looking at a downloaded file (or
+        # the Releases page) can tell which build it actually is.
         run: |
-          $version = "${{ github.ref_name }}" -replace '^v', ''
-          echo "VERSION=$version" >> $env:GITHUB_ENV
+          Compress-Archive -Path dist/ClaudeUsageWidget.exe -DestinationPath ClaudeUsageWidget-win.zip
+          Compress-Archive -Path dist/ClaudeUsageWidget.exe -DestinationPath "ClaudeUsageWidget-$env:VERSION-win.zip"
 
       - name: Build MSI installer
         # Pinned to WiX v5 (pre-6): v6+ added an Open Source Maintenance Fee
@@ -50,6 +57,7 @@ jobs:
           dotnet tool install --global wix --version 5.0.2
           wix extension add WixToolset.UI.wixext/5.0.2
           wix build installer/ClaudeUsageWidget.wxs -d SourceExe=dist/ClaudeUsageWidget.exe -d ProductVersion=${{ env.VERSION }} -arch x64 -ext WixToolset.UI.wixext -o ClaudeUsageWidget.msi
+          Copy-Item ClaudeUsageWidget.msi "ClaudeUsageWidget-$env:VERSION.msi"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -57,6 +65,8 @@ jobs:
           path: |
             ClaudeUsageWidget-win.zip
             ClaudeUsageWidget.msi
+            ClaudeUsageWidget-*-win.zip
+            ClaudeUsageWidget-*.msi
 
   build-macos:
     runs-on: macos-latest
@@ -69,6 +79,9 @@ jobs:
 
       - name: Install dependencies
         run: pip install -e ".[build]"
+
+      - name: Determine version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Generate macOS app icon (.icns)
         # sips/iconutil are macOS-native, so this (like the .dmg packaging
@@ -98,15 +111,21 @@ jobs:
           run.py
 
       - name: Package as .dmg
+        # ClaudeUsageWidget-mac.dmg is the stable name self_update.py-style
+        # "always latest" links depend on; the versioned copy is just so a
+        # human can tell which build a downloaded file actually is.
         run: |
           hdiutil create -volname "ClaudeUsageWidget" \
             -srcfolder dist/ClaudeUsageWidget.app \
             -ov -format UDZO ClaudeUsageWidget-mac.dmg
+          cp ClaudeUsageWidget-mac.dmg "ClaudeUsageWidget-$VERSION-mac.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: ClaudeUsageWidget-mac.dmg
+          path: |
+            ClaudeUsageWidget-mac.dmg
+            ClaudeUsageWidget-*-mac.dmg
 
   release:
     needs: [build-windows, build-macos]
@@ -127,3 +146,6 @@ jobs:
             ClaudeUsageWidget-win.zip
             ClaudeUsageWidget.msi
             ClaudeUsageWidget-mac.dmg
+            ClaudeUsageWidget-*-win.zip
+            ClaudeUsageWidget-*.msi
+            ClaudeUsageWidget-*-mac.dmg

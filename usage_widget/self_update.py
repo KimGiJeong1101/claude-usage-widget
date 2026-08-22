@@ -161,8 +161,21 @@ def apply_update() -> None:
     script = _RELAUNCH_SCRIPT.format(pid=os.getpid(), target=current, staged=staged)
     script_path.write_text(script, encoding="mbcs")
 
+    # PYINSTALLER_RESET_ENVIRONMENT=1 tells a onefile bootloader that
+    # inherits it to treat itself as a fresh, independent launch rather
+    # than reusing/validating against the spawning process's onefile
+    # state (PyInstaller's own documented fix for "a subprocess meant to
+    # outlive the process that spawned it"). Without it, cmd.exe -- and
+    # in turn the exe it starts -- inherits this process's environment as-is,
+    # including internal bootloader bookkeeping that still points at
+    # *this* (about to exit) process; the relaunched exe would then still
+    # hit the same "parent process has different executable" security
+    # check this whole helper script was built to avoid, just one hop
+    # later.
+    env = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
     subprocess.Popen(
         ["cmd.exe", "/c", str(script_path)],
         creationflags=subprocess.CREATE_NO_WINDOW,
         close_fds=True,
+        env=env,
     )
