@@ -317,14 +317,16 @@ class _UsageApi:
         refresh_fn: Optional[Callable[[], Optional[UsageData]]],
         close_fn: Callable[[], None],
         resize_fn: Callable[[float, float], None],
+        opacity: int,
     ):
         self._usage = usage
         self._refresh_fn = refresh_fn
         self._close_fn = close_fn
         self._resize_fn = resize_fn
+        self._opacity = opacity
 
     def get_initial_data(self) -> dict:
-        return _usage_to_dict(self._usage)
+        return {**_usage_to_dict(self._usage), "opacity": self._opacity}
 
     def refresh(self) -> Optional[dict]:
         if self._refresh_fn is None:
@@ -340,6 +342,19 @@ class _UsageApi:
 
     def resize_by(self, dw: float, dh: float) -> None:
         self._resize_fn(dw, dh)
+
+    def set_opacity(self, percent: int) -> None:
+        """Persists the opacity chosen via the popup's own slider (see
+        usage.html) so it's remembered next time this popup opens -- the
+        live preview while dragging is handled entirely in JS/CSS and
+        doesn't call this; this only runs once, on release."""
+        try:
+            percent = min(100, max(40, int(percent)))
+        except (TypeError, ValueError):
+            return
+        config = Config.load()
+        config.usage_popup_opacity = percent
+        config.save()
 
 
 _singleton_windows: dict = {}
@@ -396,7 +411,8 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
         box: list = []
         width, height = 360, 400
         size = [width, height]
-        api = _UsageApi(usage, on_refresh, _box_closer(box), _box_resizer(box, size))
+        opacity = Config.load().usage_popup_opacity
+        api = _UsageApi(usage, on_refresh, _box_closer(box), _box_resizer(box, size), opacity)
         window = _new_window("Claude 사용량", "usage.html", api, width, height, _position_near_cursor(width, height))
         box.append(window)
         return window
