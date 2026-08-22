@@ -108,11 +108,19 @@ def cleanup_stale_update_files() -> None:
     app was killed between staging the new copy and the relaunch helper
     actually swapping it in). Best-effort, meant to be called once at
     startup: a transient failure here just leaves the leftover for next
-    time, it doesn't block anything."""
+    time, it doesn't block anything.
+
+    Also cleans up `X.exe.old`, the previous (pre-v0.2.3) scheme's
+    leftover name -- that version's failure mode left one behind whenever
+    the relaunch crashed (see apply_update()'s docstring), and anyone
+    who hit that bug before upgrading would otherwise have it linger
+    forever, since a build's own code has no way to know about a naming
+    scheme introduced after it was compiled."""
     if not is_frozen():
         return
     current = _current_exe_path()
-    for path in (_staged_path_for(current), _relaunch_script_path_for(current)):
+    legacy_old = current.with_name(current.name + ".old")
+    for path in (_staged_path_for(current), _relaunch_script_path_for(current), legacy_old):
         try:
             path.unlink(missing_ok=True)
         except Exception:
