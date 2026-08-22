@@ -296,38 +296,48 @@ class _UsageApi:
         self._close_fn()
 
 
-_open_usage_windows: list = []
-_open_usage_lock = threading.Lock()
+_singleton_windows: dict = {}
+_singleton_lock = threading.Lock()
 
 
-def _register_usage_window(window: webview.Window) -> None:
-    """Tracks open usage popups so push_usage_update() can reach them --
-    without this, a popup only ever shows the snapshot it was opened with
-    (or whatever the user's own refresh click fetched), so background
-    auto-refresh ticks were invisible until closed and reopened."""
-    with _open_usage_lock:
-        _open_usage_windows.append(window)
+def _focus_or_create(key: str, create: Callable[[], webview.Window]) -> None:
+    """Ensures at most one popup of a given kind (`key`) is open at a time.
+    Without this, clicking the tray icon (or a menu item) again while its
+    popup was already open spawned a second overlapping copy instead of
+    just bringing the existing one forward."""
+    with _singleton_lock:
+        existing = _singleton_windows.get(key)
+        if existing is None:
+            window = create()
+            _singleton_windows[key] = window
+    if existing is not None:
+        try:
+            existing.show()
+        except Exception:
+            pass
+        return
 
     def _unregister():
-        with _open_usage_lock:
-            if window in _open_usage_windows:
-                _open_usage_windows.remove(window)
+        with _singleton_lock:
+            if _singleton_windows.get(key) is window:
+                del _singleton_windows[key]
 
     window.events.closed += _unregister
 
 
 def push_usage_update(usage: UsageData) -> None:
-    """Called by main.py after each successful background fetch so any
+    """Called by main.py after each successful background fetch so an
     already-open usage popup reflects it immediately, instead of only on
     the next manual refresh click."""
+    with _singleton_lock:
+        window = _singleton_windows.get("usage")
+    if window is None:
+        return
     data = json.dumps(_usage_to_dict(usage))
-    with _open_usage_lock:
-        windows = list(_open_usage_windows)
-    for window in windows:
-        try:
-            window.evaluate_js(f"window.__pushUsage && window.__pushUsage({data})")
-        except Exception:
-            pass
+    try:
+        window.evaluate_js(f"window.__pushUsage && window.__pushUsage({data})")
+    except Exception:
+        pass
 
 
 def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optional[UsageData]]] = None) -> None:
@@ -335,12 +345,16 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
     button is clicked and is expected to block until fresh data is ready,
     returning the new UsageData (or None on failure) -- safe to block here
     because pywebview already runs js_api calls off its own UI thread."""
-    box: list = []
-    api = _UsageApi(usage, on_refresh, _box_closer(box))
-    width, height = 360, 400
-    window = _new_window("Claude 사용량", "usage.html", api, width, height, _position_near_cursor(width, height))
-    box.append(window)
-    _register_usage_window(window)
+
+    def create() -> webview.Window:
+        box: list = []
+        api = _UsageApi(usage, on_refresh, _box_closer(box))
+        width, height = 360, 400
+        window = _new_window("Claude 사용량", "usage.html", api, width, height, _position_near_cursor(width, height))
+        box.append(window)
+        return window
+
+    _focus_or_create("usage", create)
 
 
 class _SettingsApi:
@@ -381,12 +395,17 @@ def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
     """on_saved, if given, is called right after a successful save -- lets
     main.py refresh the tray icon immediately instead of waiting for the
     next scheduled tick."""
-    config = Config.load()
-    box: list = []
-    api = _SettingsApi(config, on_saved, _box_closer(box))
-    width, height = 340, 440
-    window = _new_window("설정", "settings.html", api, width, height, _position_centered(width, height))
-    box.append(window)
+
+    def create() -> webview.Window:
+        config = Config.load()
+        box: list = []
+        api = _SettingsApi(config, on_saved, _box_closer(box))
+        width, height = 340, 440
+        window = _new_window("설정", "settings.html", api, width, height, _position_centered(width, height))
+        box.append(window)
+        return window
+
+    _focus_or_create("settings", create)
 
 
 class _AccountApi:
@@ -418,8 +437,13 @@ def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch: Cal
     disruptive -- both buttons clear the saved session, so showing this
     first (rather than acting immediately on a menu click) avoids an
     accidental click force-logging someone out with no warning."""
-    box: list = []
-    api = _AccountApi(email, is_logged_out, on_switch, on_logout, _box_closer(box))
-    width, height = 320, 300
-    window = _new_window("계정", "account.html", api, width, height, _position_centered(width, height))
-    box.append(window)
+
+    def create() -> webview.Window:
+        box: list = []
+        api = _AccountApi(email, is_logged_out, on_switch, on_logout, _box_closer(box))
+        width, height = 320, 300
+        window = _new_window("계정", "account.html", api, width, height, _position_centered(width, height))
+        box.append(window)
+        return window
+
+    _focus_or_create("account", create)
