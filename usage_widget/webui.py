@@ -179,6 +179,50 @@ def _round_corners(window: webview.Window, radius: int = _PANEL_RADIUS) -> None:
     window.events.resized += apply
 
 
+_GWL_EXSTYLE = -20
+_WS_EX_LAYERED = 0x00080000
+_LWA_ALPHA = 0x2
+
+
+def _apply_window_opacity(window: webview.Window, percent: int) -> None:
+    """Makes the *entire* native window translucent via the Win32
+    WS_EX_LAYERED + SetLayeredWindowAttributes APIs, rather than a CSS
+    opacity trick on parts of the page. An earlier attempt faded only the
+    usage cards' colored background/border through a CSS ::before overlay,
+    specifically to keep text crisp -- but that's not what was asked for:
+    the whole window (text included) should fade as one sheet of glass,
+    the same way a semi-transparent KakaoTalk window looks. Layering the
+    real window blends every pixel it draws against whatever is behind it,
+    which is the only way to get that."""
+    if not _IS_WINDOWS:
+        return
+    try:
+        hwnd = window.native.Handle.ToInt32()
+        percent = min(100, max(40, int(percent)))
+        alpha = round(percent / 100 * 255)
+        user32 = ctypes.windll.user32
+        ex_style = user32.GetWindowLongW(hwnd, _GWL_EXSTYLE)
+        user32.SetWindowLongW(hwnd, _GWL_EXSTYLE, ex_style | _WS_EX_LAYERED)
+        user32.SetLayeredWindowAttributes(hwnd, 0, alpha, _LWA_ALPHA)
+    except Exception:
+        pass
+
+
+def _apply_initial_opacity(window: webview.Window, percent: int) -> None:
+    """Same DPI/timing reasoning as _round_corners: window.native isn't
+    reliably usable until the window has actually been shown, so the
+    first application of a saved (non-100%) opacity waits for that event
+    too. Later live changes from the slider happen well after the window
+    is already showing, so they call _apply_window_opacity directly."""
+    if not _IS_WINDOWS or percent >= 100:
+        return
+
+    def apply(*_args):
+        _apply_window_opacity(window, percent)
+
+    window.events.shown += apply
+
+
 # pywebview's WinForms backend sets Form.Size *before* switching
 # FormBorderStyle to frameless (see winforms.py: Size is assigned near the
 # top of the window-init method, FormBorderStyle = None happens later).
@@ -286,6 +330,18 @@ def _box_resizer(box: list, size: list) -> Callable[[float, float], None]:
     return _resize
 
 
+def _box_opacity_setter(box: list) -> Callable[[int], None]:
+    """Applies a percent to whatever window later gets appended to box, via
+    _apply_window_opacity -- same closure-over-a-list pattern as
+    _box_closer/_box_resizer, so js_api never holds the window directly."""
+
+    def _apply(percent: int) -> None:
+        if box:
+            _apply_window_opacity(box[0], percent)
+
+    return _apply
+
+
 def _usage_to_dict(usage: UsageData) -> dict:
     return {
         "session": {
@@ -318,12 +374,14 @@ class _UsageApi:
         close_fn: Callable[[], None],
         resize_fn: Callable[[float, float], None],
         opacity: int,
+        opacity_fn: Callable[[int], None],
     ):
         self._usage = usage
         self._refresh_fn = refresh_fn
         self._close_fn = close_fn
         self._resize_fn = resize_fn
         self._opacity = opacity
+        self._opacity_fn = opacity_fn
 
     def get_initial_data(self) -> dict:
         return {**_usage_to_dict(self._usage), "opacity": self._opacity}
@@ -343,15 +401,25 @@ class _UsageApi:
     def resize_by(self, dw: float, dh: float) -> None:
         self._resize_fn(dw, dh)
 
+    def preview_opacity(self, percent: int) -> None:
+        """Live preview while dragging the slider -- applies immediately to
+        the real window (see _apply_window_opacity) but doesn't persist,
+        so letting go isn't required for the preview to be honest about
+        what releasing would look like."""
+        try:
+            self._opacity_fn(int(percent))
+        except (TypeError, ValueError):
+            pass
+
     def set_opacity(self, percent: int) -> None:
-        """Persists the opacity chosen via the popup's own slider (see
-        usage.html) so it's remembered next time this popup opens -- the
-        live preview while dragging is handled entirely in JS/CSS and
-        doesn't call this; this only runs once, on release."""
+        """Called once, when the slider is released -- applies the final
+        value (in case this fires without a preceding preview_opacity) and
+        persists it so it's remembered next time this popup opens."""
         try:
             percent = min(100, max(40, int(percent)))
         except (TypeError, ValueError):
             return
+        self._opacity_fn(percent)
         config = Config.load()
         config.usage_popup_opacity = percent
         config.save()
@@ -412,9 +480,11 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
         width, height = 360, 400
         size = [width, height]
         opacity = Config.load().usage_popup_opacity
-        api = _UsageApi(usage, on_refresh, _box_closer(box), _box_resizer(box, size), opacity)
+        opacity_fn = _box_opacity_setter(box)
+        api = _UsageApi(usage, on_refresh, _box_closer(box), _box_resizer(box, size), opacity, opacity_fn)
         window = _new_window("Claude 사용량", "usage.html", api, width, height, _position_near_cursor(width, height))
         box.append(window)
+        _apply_initial_opacity(window, opacity)
         return window
 
     _focus_or_create("usage", create)

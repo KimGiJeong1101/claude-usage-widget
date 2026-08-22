@@ -5,31 +5,15 @@
 <link rel="stylesheet" href="common.css">
 <script src="common.js"></script>
 <style>
-  :root {
-    --usage-alpha: 1;
-  }
   .usage-card {
-    position: relative;
     padding: 18px;
+    border-left: 4px solid var(--severity, var(--card-border));
+    background: linear-gradient(120deg, var(--severity-wash, transparent), var(--card-bg) 55%);
+    transition: border-color 0.3s ease, background 0.3s ease;
     flex: 1;
     display: flex;
   }
-  /* The colored fill + accent border live on this overlay (not the card
-     itself) so the slider's opacity fades the whole colored surface as one
-     piece, while the text/ring content (.usage-row, z-index 1 below) stays
-     fully readable regardless of how transparent the card looks. */
-  .usage-card::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    border-radius: inherit;
-    border-left: 4px solid var(--severity, var(--card-border));
-    background: linear-gradient(120deg, var(--severity-wash, transparent), var(--card-bg) 55%);
-    opacity: var(--usage-alpha);
-    transition: opacity 0.15s ease, border-color 0.3s ease, background 0.3s ease;
-  }
-  .usage-row { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 1; }
+  .usage-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 1; }
   .usage-info { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .usage-title { font-size: 13px; font-weight: 600; letter-spacing: -0.1px; }
   .usage-reset { line-height: 1.4; }
@@ -89,13 +73,14 @@
       <div class="title">Claude 사용량</div>
       <button class="icon-btn tone-accent" id="btn-opacity" title="투명도">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3c4 5 7 8.5 7 12a7 7 0 11-14 0c0-3.5 3-7 7-12z"/>
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M12 3a9 9 0 000 18z" fill="currentColor" stroke="none"/>
         </svg>
       </button>
       <button class="icon-btn tone-accent" id="btn-pin" title="고정">
         <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path id="pin-path" d="M12 21s7-7.58 7-12A7 7 0 105 9c0 4.42 7 12 7 12z" fill="none"/>
-          <circle cx="12" cy="9" r="2.1" fill="currentColor" stroke="none"/>
+          <path id="pin-path" d="M9 4h6l-1 6 3 2v2H7v-2l3-2z" fill="none"/>
+          <line x1="12" y1="14" x2="9" y2="21"/>
         </svg>
       </button>
       <button class="icon-btn tone-accent" id="btn-refresh" title="새로고침">
@@ -234,8 +219,21 @@
   const opacityInput = document.getElementById("opacity");
   const opacityValueLabel = document.getElementById("opacity-value");
 
+  // Growing/shrinking the actual window by the strip's height (instead of
+  // just toggling its CSS visibility) keeps the cards below it from being
+  // squeezed into whatever room is left in a fixed-size window. Reuses
+  // resize_by -- the same channel the drag handle uses -- so this stays
+  // consistent with how a manual resize already re-flows the content.
   opacityBtn.addEventListener("click", () => {
-    opacityStrip.classList.toggle("visible");
+    const opening = !opacityStrip.classList.contains("visible");
+    if (opening) {
+      opacityStrip.classList.add("visible");
+      window.pywebview.api.resize_by(0, opacityStrip.offsetHeight);
+    } else {
+      const stripHeight = opacityStrip.offsetHeight;
+      opacityStrip.classList.remove("visible");
+      window.pywebview.api.resize_by(0, -stripHeight);
+    }
   });
 
   // The whole popup is drag-to-move (see the built-in easy_drag listener
@@ -243,10 +241,15 @@
   // the slider thumb into moving the window instead of dragging it.
   opacityInput.addEventListener("mousedown", (ev) => ev.stopPropagation());
 
+  // Native window opacity (see webui.py's _apply_window_opacity) fades the
+  // whole window -- text included -- as one piece, rather than a CSS trick
+  // on just the page's own content. preview_opacity() applies immediately
+  // without saving, on every drag tick; set_opacity() (on release) applies
+  // once more and persists.
   opacityInput.addEventListener("input", () => {
     const value = opacityInput.value;
-    document.documentElement.style.setProperty("--usage-alpha", value / 100);
     opacityValueLabel.textContent = `${value}%`;
+    window.pywebview.api.preview_opacity(parseInt(value, 10));
   });
 
   opacityInput.addEventListener("change", () => {
@@ -266,7 +269,6 @@
     const opacity = data.opacity ?? 100;
     opacityInput.value = opacity;
     opacityValueLabel.textContent = `${opacity}%`;
-    document.documentElement.style.setProperty("--usage-alpha", opacity / 100);
     initResizeGrip();
   });
 
