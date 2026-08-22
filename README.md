@@ -35,13 +35,13 @@
 <td width="33%" valign="top">
 
 ### 🟢 실시간 트레이 게이지
-세션(5시간) 사용량이 트레이 아이콘에 항상 표시됩니다. 클릭 한 번으로 세션 / 주간 상세 팝업까지.
+세션(5시간) 사용량이 트레이 아이콘 + 툴팁(%)에 항상 표시됩니다. 클릭 한 번으로 세션 / 주간 상세 팝업까지.
 
 </td>
 <td width="33%" valign="top">
 
 ### 🪟 독립적인 다중 팝업
-사용량 / 설정 / 계정 팝업을 동시에 여러 개 띄워둘 수 있습니다. 하나가 다른 하나를 닫지 않아요.
+사용량 / 설정 / 계정 팝업을 동시에 여러 개 띄워둘 수 있습니다. 같은 팝업을 또 열면 새로 뜨는 대신 기존 창을 앞으로 가져와요.
 
 </td>
 <td width="33%" valign="top">
@@ -55,9 +55,23 @@
 <td width="33%" valign="top">
 
 ### 🔄 즉시 새로고침
-갱신 주기를 기다릴 필요 없이, 팝업에서 버튼 한 번으로 바로 최신 데이터를 가져옵니다.
+버튼 한 번으로 바로 최신 데이터를 가져오고, 백그라운드 자동 갱신 결과도 열려 있는 팝업에 실시간으로 반영됩니다.
 
 </td>
+<td width="33%" valign="top">
+
+### ↔️ 팝업 크기 조절
+오른쪽 아래 손잡이를 드래그해서 세 팝업 모두 원하는 크기로 늘리거나 줄일 수 있습니다.
+
+</td>
+<td width="33%" valign="top">
+
+### 🫧 투명도 조절
+사용량 팝업 전용 — 창 자체(텍스트 포함)를 통째로 반투명하게, 원하는 정도로 슬라이더로 조절합니다.
+
+</td>
+</tr>
+<tr>
 <td width="33%" valign="top">
 
 ### 🎨 트레이 아이콘 5종
@@ -70,18 +84,24 @@
 로그인된 계정 확인, 다른 계정으로 전환, 로그아웃(로그아웃 중엔 추적을 완전히 멈춤).
 
 </td>
-</tr>
-<tr>
 <td width="33%" valign="top">
 
 ### 🚀 자동 시작
 PC를 켤 때 자동으로 실행할지 여부를 설정에서 켜고 끌 수 있습니다 (Windows).
 
 </td>
+</tr>
+<tr>
 <td width="33%" valign="top">
 
 ### 🔐 최초 1회 로그인
 이후엔 세션이 자동으로 유지돼서, 재부팅해도 다시 로그인할 필요가 없습니다.
+
+</td>
+<td width="33%" valign="top">
+
+### ⬆️ 업데이트 알림
+새 버전이 나오면 트레이 알림 + 우클릭 메뉴로 안내합니다. Windows는 메뉴에서 바로 적용까지 가능해요.
 
 </td>
 <td width="33%" valign="top">
@@ -99,11 +119,20 @@ PC를 켤 때 자동으로 실행할지 여부를 설정에서 켜고 끌 수 �
 
 <div align="center">
 
-<img src="docs/screenshot.png" width="300" alt="사용량 팝업">
-
+<table>
+<tr>
+<td align="center" width="50%">
+<img src="docs/screenshot.png" width="300" alt="사용량 팝업"><br>
 <sub>사용량 팝업 — 클릭 위치 근처에 뜨고, 📌로 고정하지 않으면 마우스가 벗어날 때 자동으로 닫힙니다</sub>
+</td>
+<td align="center" width="50%">
+<img src="docs/screenshot-opacity.png" width="300" alt="투명도 조절"><br>
+<sub>투명도 슬라이더 — 창 전체가 뒤 화면이 비칠 정도로 반투명해집니다</sub>
+</td>
+</tr>
+</table>
 
-<br><br>
+<br>
 
 <table>
 <tr>
@@ -130,7 +159,7 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 
 | OS | 형식 | 다운로드 |
 | :---: | :---: | :---: |
-| 🪟 Windows | 설치형 (.msi) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget.msi)** |
+| 🪟 Windows | 설치형 (.msi, 시작 메뉴·바탕화면 바로가기 생성) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget.msi)** |
 | 🪟 Windows | 포터블 (.zip) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-win.zip)** |
 | 🍎 macOS | 디스크 이미지 (.dmg) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.dmg)** |
 
@@ -159,10 +188,12 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 | 동작 | 결과 |
 | --- | --- |
 | 좌클릭 | 세션/주간 사용량 %와 리셋 시간 팝업 (클릭 위치 근처에 뜨고, 마우스가 벗어나면 자동으로 닫힘) |
-| 팝업의 📌 / ⟳ | 팝업 고정(안 닫히게) / 갱신 주기를 기다리지 않고 즉시 새로고침 |
+| 팝업의 🫧 / 📌 / ⟳ | 투명도 슬라이더 펼치기 / 팝업 고정(안 닫히게) / 즉시 새로고침 |
+| 팝업 오른쪽 아래 손잡이 | 드래그해서 팝업 크기 조절 |
 | 우클릭 → 열기 | 좌클릭과 동일하게 사용량 팝업을 엽니다 |
 | 우클릭 → 설정 | 자동갱신 주기, 트레이 아이콘 스타일, (Windows) PC 시작 시 자동 실행 여부 |
 | 우클릭 → 계정 | 현재 로그인 계정 확인, 계정 변경(재로그인), 로그아웃 |
+| 우클릭 → 새 버전 있음 (새 버전이 있을 때만 표시) | Windows는 바로 적용, 그 외에는 다운로드 페이지로 이동 |
 | 우클릭 → 종료 | 위젯 완전히 종료 |
 
 <br>
@@ -193,6 +224,16 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
   파이썬입니다. Windows에서 완전히 둥근 모서리를 만들기 위해 `SetWindowRgn` Win32 API로
   창 자체를 둥근 모양으로 잘라내는 방식을 씁니다(일반적인 투명 배경 방식은 모서리에
   잔상이 남는 문제가 있었습니다).
+- 프레임 없는 창이라 OS 리사이즈 테두리가 없어서, 팝업 크기 조절은 오른쪽 아래 손잡이를
+  드래그한 만큼 파이썬 쪽에서 직접 `window.resize()`를 호출하는 방식으로 구현했습니다.
+- 사용량 팝업의 투명도는 CSS `opacity`가 아니라 Windows의 `WS_EX_LAYERED` +
+  `SetLayeredWindowAttributes` API로 창 전체(텍스트 포함)에 실제 알파 블렌딩을 적용합니다
+  — 그래서 카드 배경색뿐 아니라 창 전체가 하나의 유리판처럼 같이 흐려집니다.
+- 새 버전 확인은 GitHub Releases API로 현재 버전과 최신 태그를 비교하는 방식이라
+  별도 업데이트 서버가 필요 없습니다. Windows에서는 "지금 업데이트" 클릭 시 최신
+  포터블 zip을 받아 실행 중인 exe를 통째로 교체 후 재시작합니다(실행 중인 파일을
+  삭제 없이 이름만 바꾸는 게 허용되는 Windows 특성을 이용). macOS는 `.app` 번들
+  구조상 같은 방식이 안 통해서 아직 다운로드 페이지 안내로만 동작합니다.
 
 </details>
 
@@ -222,10 +263,10 @@ python -m usage_widget.main
 
 ```bash
 pip install -e ".[build]"
-pyinstaller --onefile --windowed --name ClaudeUsageWidget --add-data "usage_widget/assets;usage_widget/assets" run.py
+pyinstaller --onefile --windowed --name ClaudeUsageWidget --icon installer/icon/ClaudeUsageWidget.ico --add-data "usage_widget/assets;usage_widget/assets" run.py
 ```
 
-`dist/ClaudeUsageWidget.exe`가 생성됩니다. Playwright 드라이버가 통째로
+`--icon`을 빼면 실행 파일에 PyInstaller 기본 아이콘이 그대로 붙습니다. `dist/ClaudeUsageWidget.exe`가 생성됩니다. Playwright 드라이버가 통째로
 포함되어 exe 용량이 큰 편입니다(수십 MB). macOS는 각자의 macOS 환경에서
 같은 명령으로 따로 빌드해야 합니다 (크로스 빌드 불가). `v*` 형태의 git 태그를
 push하면 GitHub Actions가 Windows/macOS 빌드를 자동으로 만들어 릴리즈에 올립니다.
