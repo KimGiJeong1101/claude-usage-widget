@@ -225,8 +225,10 @@ def _on_update_click(icon: pystray.Icon, item) -> None:
             icon.update_menu()
             icon.notify(f"업데이트에 실패했습니다: {exc}", "잠시 후 다시 시도해주세요")
             return
-        # apply_update() only spawns the new process -- this process still
-        # has to shut itself down, same as the "종료" menu item.
+        # apply_update() only staged the download and spawned a detached
+        # helper that's waiting on *this* process's PID to exit -- this
+        # process still has to actually shut itself down, same as the
+        # "종료" menu item, or the helper waits forever.
         icon.stop()
         shutdown_gui()
 
