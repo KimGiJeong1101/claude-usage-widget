@@ -23,6 +23,7 @@ from usage_widget.auth import has_saved_session, login_and_save_session
 from usage_widget.config import Config
 from usage_widget.fetcher import SessionExpiredError, UsageData, fetch_account_email, fetch_usage
 from usage_widget.paths import session_state_path
+from usage_widget.self_update import apply_update, can_self_update, cleanup_stale_update_files
 from usage_widget.tray_icon import build_icon_image
 from usage_widget.update_check import RELEASES_URL, check_for_update
 from usage_widget.webui import (
@@ -185,16 +186,51 @@ def _on_quit(icon: pystray.Icon, item) -> None:
     shutdown_gui()
 
 
-def _on_open_release_page(icon: pystray.Icon, item) -> None:
-    webbrowser.open(RELEASES_URL)
+_update_in_progress = False
 
 
 def _update_menu_text(item) -> str:
-    return f"새 버전 있음 (v{_update_available_version}) — 다운로드"
+    label = "지금 업데이트" if can_self_update() else "다운로드"
+    if _update_in_progress:
+        return "업데이트 적용 중..."
+    return f"새 버전 있음 (v{_update_available_version}) — {label}"
 
 
 def _update_menu_visible(item) -> bool:
     return _update_available_version is not None
+
+
+def _update_menu_enabled(item) -> bool:
+    return not _update_in_progress
+
+
+def _on_update_click(icon: pystray.Icon, item) -> None:
+    if not can_self_update():
+        webbrowser.open(RELEASES_URL)
+        return
+
+    global _update_in_progress
+    if _update_in_progress:
+        return
+    _update_in_progress = True
+    icon.update_menu()
+
+    def worker():
+        global _update_in_progress
+        try:
+            icon.notify("새 버전을 받는 중입니다...", "업데이트")
+            apply_update()
+        except Exception as exc:
+            _update_in_progress = False
+            icon.update_menu()
+            icon.notify(f"업데이트에 실패했습니다: {exc}", "잠시 후 다시 시도해주세요")
+            return
+        # apply_update() only spawns the new process -- this process still
+        # has to shut itself down, same as the "종료" menu item.
+        icon.stop()
+        shutdown_gui()
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 def _update_check_loop(icon: pystray.Icon) -> None:
@@ -207,8 +243,9 @@ def _update_check_loop(icon: pystray.Icon) -> None:
         _update_available_version = version
         if version is not None and version not in _update_notified_versions:
             _update_notified_versions.add(version)
+            action = "우클릭 메뉴에서 바로 적용할 수 있어요" if can_self_update() else "우클릭 메뉴에서 다운로드하세요"
             try:
-                icon.notify(f"Claude Usage Widget v{version} 다운로드", "새 버전이 나왔어요")
+                icon.notify(f"Claude Usage Widget v{version} — {action}", "새 버전이 나왔어요")
             except Exception:
                 pass
         icon.update_menu()
@@ -223,6 +260,7 @@ def _run_tray(icon: pystray.Icon) -> None:
 
 def run() -> None:
     global _latest_usage
+    cleanup_stale_update_files()
     if not has_saved_session():
         login_and_save_session()
 
@@ -233,7 +271,9 @@ def run() -> None:
         pystray.MenuItem("열기", _on_open, default=True),
         pystray.MenuItem("설정", _on_settings),
         pystray.MenuItem("계정", _on_switch_account),
-        pystray.MenuItem(_update_menu_text, _on_open_release_page, visible=_update_menu_visible),
+        pystray.MenuItem(
+            _update_menu_text, _on_update_click, visible=_update_menu_visible, enabled=_update_menu_enabled
+        ),
         pystray.MenuItem("종료", _on_quit),
     )
     icon = pystray.Icon(
