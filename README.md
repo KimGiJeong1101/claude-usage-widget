@@ -34,13 +34,13 @@
 <tr>
 <td width="33%" valign="top">
 
-### 🟢 실시간 트레이 게이지
+### ⚡ 실시간 트레이 게이지
 세션(5시간) 사용량이 트레이 아이콘 + 툴팁(%)에 항상 표시됩니다. 클릭 한 번으로 세션 / 주간 상세 팝업까지.
 
 </td>
 <td width="33%" valign="top">
 
-### :window: 독립적인 다중 팝업
+### 💻 독립적인 다중 팝업
 사용량 / 설정 / 계정 팝업을 동시에 여러 개 띄워둘 수 있습니다. 같은 팝업을 또 열면 새로 뜨는 대신 기존 창을 앞으로 가져와요.
 
 </td>
@@ -60,13 +60,13 @@
 </td>
 <td width="33%" valign="top">
 
-### :left_right_arrow: 팝업 크기 조절
+### 📏 팝업 크기 조절
 오른쪽 아래 손잡이를 드래그해서 세 팝업 모두 원하는 크기로 늘리거나 줄일 수 있습니다.
 
 </td>
 <td width="33%" valign="top">
 
-### :bubbles: 투명도 조절
+### 💧 투명도 조절
 사용량 팝업 전용 — 창 자체(텍스트 포함)를 통째로 반투명하게, 원하는 정도로 슬라이더로 조절합니다.
 
 </td>
@@ -80,7 +80,7 @@
 </td>
 <td width="33%" valign="top">
 
-### :bust_in_silhouette: 계정 관리
+### 🔑 계정 관리
 로그인된 계정 확인, 다른 계정으로 전환, 로그아웃(로그아웃 중엔 추적을 완전히 멈춤).
 
 </td>
@@ -106,7 +106,7 @@ PC를 켤 때 자동으로 실행할지 여부를 설정에서 켜고 끌 수 �
 </td>
 <td width="33%" valign="top">
 
-### :window::apple: 크로스플랫폼
+### 💻🍎 크로스플랫폼
 하나의 코드베이스로 Windows / macOS 빌드를 모두 제공합니다.
 
 </td>
@@ -159,8 +159,8 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 
 | OS | 형식 | 다운로드 |
 | :---: | :---: | :---: |
-| :window: Windows | 설치형 (.msi, 시작 메뉴·바탕화면 바로가기 생성) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget.msi)** |
-| :window: Windows | 포터블 (.zip) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-win.zip)** |
+| 💻 Windows | 설치형 (.msi, 시작 메뉴·바탕화면 바로가기 생성) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget.msi)** |
+| 💻 Windows | 포터블 (.zip) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-win.zip)** |
 | 🍎 macOS | 디스크 이미지 (.dmg) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.dmg)** |
 
 </div>
@@ -188,7 +188,7 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 | 동작 | 결과 |
 | --- | --- |
 | 좌클릭 | 세션/주간 사용량 %와 리셋 시간 팝업 (클릭 위치 근처에 뜨고, 마우스가 벗어나면 자동으로 닫힘) |
-| 팝업의 :bubbles: / 📌 / ⟳ | 투명도 슬라이더 펼치기 / 팝업 고정(안 닫히게) / 즉시 새로고침 |
+| 팝업의 💧 / 📌 / ⟳ | 투명도 슬라이더 펼치기 / 팝업 고정(안 닫히게) / 즉시 새로고침 |
 | 팝업 오른쪽 아래 손잡이 | 드래그해서 팝업 크기 조절 |
 | 우클릭 → 열기 | 좌클릭과 동일하게 사용량 팝업을 엽니다 |
 | 우클릭 → 설정 | 자동갱신 주기, 트레이 아이콘 스타일, (Windows) PC 시작 시 자동 실행 여부 |
