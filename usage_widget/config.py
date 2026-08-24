@@ -26,16 +26,29 @@ class Config:
         path = config_path()
         if not path.exists():
             return cls()
-        data = json.loads(path.read_text(encoding="utf-8"))
-        # config.json is shared by whatever version of the app last wrote
-        # it -- an older build (without a field a newer one added, e.g.
-        # `language`) would otherwise crash on a file a newer build saved,
-        # since dataclass.__init__ rejects unexpected keyword arguments.
-        # Dropping unknown keys instead just falls back to that field's
-        # default, which is the same as if it had never been saved at all.
-        known_fields = {f.name for f in fields(cls)}
-        data = {key: value for key, value in data.items() if key in known_fields}
-        return cls(**data)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            # config.json is shared by whatever version of the app last
+            # wrote it -- an older build (without a field a newer one
+            # added, e.g. `language`) would otherwise crash on a file a
+            # newer build saved, since dataclass.__init__ rejects
+            # unexpected keyword arguments. Dropping unknown keys instead
+            # just falls back to that field's default, which is the same
+            # as if it had never been saved at all.
+            known_fields = {f.name for f in fields(cls)}
+            data = {key: value for key, value in data.items() if key in known_fields}
+            return cls(**data)
+        except Exception:
+            # Anything this build genuinely can't make sense of (invalid
+            # JSON, a write that got cut off mid-save, a field with the
+            # wrong type) would otherwise crash the whole app on startup
+            # with a stack trace only meaningful to someone reading this
+            # source -- not something a teammate hitting this should have
+            # to work around by hand. This is just user-adjustable
+            # preferences, not data that actually matters (the login
+            # session lives in a separate file), so falling back to
+            # defaults and moving on is the right trade-off.
+            return cls()
 
     def save(self) -> None:
         config_path().write_text(
