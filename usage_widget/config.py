@@ -1,7 +1,7 @@
 """User-editable settings (refresh interval, tray icon style)."""
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 
 from usage_widget.i18n import DEFAULT_LANGUAGE
 from usage_widget.paths import config_path
@@ -27,6 +27,14 @@ class Config:
         if not path.exists():
             return cls()
         data = json.loads(path.read_text(encoding="utf-8"))
+        # config.json is shared by whatever version of the app last wrote
+        # it -- an older build (without a field a newer one added, e.g.
+        # `language`) would otherwise crash on a file a newer build saved,
+        # since dataclass.__init__ rejects unexpected keyword arguments.
+        # Dropping unknown keys instead just falls back to that field's
+        # default, which is the same as if it had never been saved at all.
+        known_fields = {f.name for f in fields(cls)}
+        data = {key: value for key, value in data.items() if key in known_fields}
         return cls(**data)
 
     def save(self) -> None:
