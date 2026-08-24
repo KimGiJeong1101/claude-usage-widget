@@ -176,9 +176,16 @@ def _on_open(icon: pystray.Icon, item) -> None:
 
 
 def _on_settings(icon: pystray.Icon, item) -> None:
-    threading.Thread(
-        target=lambda: show_settings_popup(on_saved=lambda: _update_icon(icon)), daemon=True
-    ).start()
+    def on_saved():
+        _update_icon(icon)
+        # _update_icon only repaints the icon image/tooltip -- the menu
+        # labels (열기/설정/계정/종료, all language-dependent callables now)
+        # otherwise wouldn't be re-evaluated until something else happened
+        # to call update_menu() next (e.g. the 6-hour update-check loop),
+        # which made a language change look like it "hadn't taken" yet.
+        icon.update_menu()
+
+    threading.Thread(target=lambda: show_settings_popup(on_saved=on_saved), daemon=True).start()
 
 
 def _on_switch_account(icon: pystray.Icon, item) -> None:
