@@ -162,6 +162,7 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 | 💻 Windows | 설치형 (.msi, 시작 메뉴·바탕화면 바로가기 생성) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget.msi)** |
 | 💻 Windows | 포터블 (.zip) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-win.zip)** |
 | 🍎 macOS | 디스크 이미지 (.dmg) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.dmg)** |
+| 🍎 macOS | 앱 번들 (.zip) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.zip)** |
 
 </div>
 

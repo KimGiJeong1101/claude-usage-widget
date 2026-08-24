@@ -120,12 +120,23 @@ jobs:
             -ov -format UDZO ClaudeUsageWidget-mac.dmg
           cp ClaudeUsageWidget-mac.dmg "ClaudeUsageWidget-$VERSION-mac.dmg"
 
+      - name: Zip the .app bundle (portable alternative to the .dmg)
+        # ditto (not plain zip) is Apple's recommended way to archive a .app
+        # bundle -- it preserves resource forks/extended attributes that a
+        # generic zip can mangle. Same stable-name-plus-versioned-copy
+        # pattern as the other artifacts.
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent dist/ClaudeUsageWidget.app ClaudeUsageWidget-mac.zip
+          cp ClaudeUsageWidget-mac.zip "ClaudeUsageWidget-$VERSION-mac.zip"
+
       - uses: actions/upload-artifact@v4
         with:
           name: macos-build
           path: |
             ClaudeUsageWidget-mac.dmg
             ClaudeUsageWidget-*-mac.dmg
+            ClaudeUsageWidget-mac.zip
+            ClaudeUsageWidget-*-mac.zip
 
   release:
     needs: [build-windows, build-macos]
@@ -146,6 +157,8 @@ jobs:
             ClaudeUsageWidget-win.zip
             ClaudeUsageWidget.msi
             ClaudeUsageWidget-mac.dmg
+            ClaudeUsageWidget-mac.zip
             ClaudeUsageWidget-*-win.zip
             ClaudeUsageWidget-*.msi
             ClaudeUsageWidget-*-mac.dmg
+            ClaudeUsageWidget-*-mac.zip
