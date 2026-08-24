@@ -85,8 +85,17 @@
   // Re-translates this screen's own labels immediately as the dropdown
   // changes, same "preview before you commit" idea as the opacity slider --
   // saving is still required to persist it and to update the tray menu/other
-  // popups.
-  languageSelect.addEventListener("change", () => applyI18n(languageSelect.value));
+  // popups. The tray-style dropdown's options aren't tagged with data-i18n
+  // (their text came from Python, localized to whatever language the popup
+  // was opened with) so they need to be re-labeled explicitly here too,
+  // or they'd be the one thing on this screen not previewing live.
+  languageSelect.addEventListener("change", () => {
+    const lang = languageSelect.value;
+    applyI18n(lang);
+    for (const opt of styleSelect.options) {
+      opt.textContent = trayStyleLabel(lang, opt.value);
+    }
+  });
 
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();

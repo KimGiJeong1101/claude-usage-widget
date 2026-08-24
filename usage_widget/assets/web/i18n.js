@@ -118,6 +118,25 @@ function i18nText(lang, key) {
   return table[key] ?? I18N_TRANSLATIONS.ko[key] ?? key;
 }
 
+// Tray icon style names (도넛 게이지/배터리/...) come from Python
+// (usage_widget/i18n.py's tray_style_labels()) as the settings popup's
+// initial data, already localized to whatever language was active when it
+// was opened. That's fine after a save-and-reopen, but the language
+// dropdown's live preview (see settings.html) has no server round-trip to
+// re-fetch them with -- so it needs its own copy here, kept in sync by
+// hand with the Python side same as everything else in this file.
+const I18N_TRAY_STYLE_LABELS = {
+  ko: { donut: "도넛 게이지", battery: "배터리", bar: "막대", big_number: "숫자", liquid: "원형 채움" },
+  en: { donut: "Donut gauge", battery: "Battery", bar: "Bar", big_number: "Number", liquid: "Liquid fill" },
+  ja: { donut: "ドーナツゲージ", battery: "バッテリー", bar: "バー", big_number: "数字", liquid: "円形フィル" },
+  "zh-CN": { donut: "环形量表", battery: "电池", bar: "条形", big_number: "数字", liquid: "圆形填充" },
+};
+
+function trayStyleLabel(lang, key) {
+  const table = I18N_TRAY_STYLE_LABELS[lang] || I18N_TRAY_STYLE_LABELS.ko;
+  return table[key] ?? I18N_TRAY_STYLE_LABELS.ko[key] ?? key;
+}
+
 // Swaps every tagged element's text/title to `lang`. Called once initial
 // data (which carries the saved language) arrives from Python -- the
 // HTML's hardcoded Korean text is just the pre-JS fallback shown for the
