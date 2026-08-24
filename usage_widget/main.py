@@ -318,10 +318,27 @@ def _update_check_loop(icon: pystray.Icon) -> None:
         time.sleep(_UPDATE_CHECK_INTERVAL_SECONDS)
 
 
+def _announce_started(icon: pystray.Icon) -> None:
+    """pystray's setup= callback: fires once the icon has actually been
+    added to the tray, not just constructed -- calling icon.notify() any
+    earlier isn't guaranteed to work since the OS-level tray entry it
+    attaches the balloon/toast to wouldn't exist yet. A brief toast instead
+    of forcing a pinned popup open on every launch (see
+    claude-usage-widget-plan.md's discussion of this trade-off) -- someone
+    who launched without watching the taskbar still gets a clear "yes, it's
+    running" signal, without a window they now have to deal with."""
+    icon.visible = True
+    try:
+        lang = Config.load().language
+        icon.notify(i18n.t("notify.started_msg", lang), i18n.t("tray.tooltip_base", lang))
+    except Exception:
+        pass
+
+
 def _run_tray(icon: pystray.Icon) -> None:
     threading.Thread(target=_refresh_loop, args=(icon,), daemon=True).start()
     threading.Thread(target=_update_check_loop, args=(icon,), daemon=True).start()
-    icon.run()
+    icon.run(setup=_announce_started)
 
 
 def _build_menu() -> pystray.Menu:
