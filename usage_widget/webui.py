@@ -24,10 +24,10 @@ from typing import Callable, Optional
 
 import webview
 
-from usage_widget import autostart
+from usage_widget import autostart, i18n
 from usage_widget.config import Config
 from usage_widget.fetcher import UsageData
-from usage_widget.tray_icon import DEFAULT_STYLE, STYLE_LABELS
+from usage_widget.tray_icon import DEFAULT_STYLE
 
 _ASSET_DIR = Path(__file__).parent / "assets" / "web"
 _IS_WINDOWS = sys.platform == "win32"
@@ -280,19 +280,19 @@ def _new_window(title: str, page: str, js_api, width: int, height: int, position
     return window
 
 
-def _reset_status_text(reset_at: Optional[datetime]) -> str:
+def _reset_status_text(reset_at: Optional[datetime], lang: str) -> str:
     """The API returns no reset time for a window with no usage yet (e.g.
     right after a 5-hour session resets, before the next message is
     sent)."""
     if reset_at is None:
-        return "아직 사용 시작 전"
+        return i18n.t("reset.not_started", lang)
     delta = reset_at - datetime.now()
     total_minutes = max(int(delta.total_seconds()) // 60, 0)
     days, remainder = divmod(total_minutes, 24 * 60)
     hours, minutes = divmod(remainder, 60)
     if days:
-        return f"리셋까지 {days}일 {hours}시간 후"
-    return f"리셋까지 {hours}시간 {minutes}분 후"
+        return i18n.t("reset.days", lang, days=days, hours=hours)
+    return i18n.t("reset.hours", lang, hours=hours, minutes=minutes)
 
 
 def _box_closer(box: list) -> Callable[[], None]:
@@ -342,15 +342,15 @@ def _box_opacity_setter(box: list) -> Callable[[int], None]:
     return _apply
 
 
-def _usage_to_dict(usage: UsageData) -> dict:
+def _usage_to_dict(usage: UsageData, lang: str) -> dict:
     return {
         "session": {
             "percent": usage.session_percent,
-            "reset_text": _reset_status_text(usage.session_reset_at),
+            "reset_text": _reset_status_text(usage.session_reset_at, lang),
         },
         "week": {
             "percent": usage.week_percent,
-            "reset_text": _reset_status_text(usage.week_reset_at),
+            "reset_text": _reset_status_text(usage.week_reset_at, lang),
         },
     }
 
@@ -375,6 +375,7 @@ class _UsageApi:
         resize_fn: Callable[[float, float], None],
         opacity: int,
         opacity_fn: Callable[[int], None],
+        lang: str,
     ):
         self._usage = usage
         self._refresh_fn = refresh_fn
@@ -382,9 +383,10 @@ class _UsageApi:
         self._resize_fn = resize_fn
         self._opacity = opacity
         self._opacity_fn = opacity_fn
+        self._lang = lang
 
     def get_initial_data(self) -> dict:
-        return {**_usage_to_dict(self._usage), "opacity": self._opacity}
+        return {**_usage_to_dict(self._usage, self._lang), "opacity": self._opacity, "language": self._lang}
 
     def refresh(self) -> Optional[dict]:
         if self._refresh_fn is None:
@@ -393,7 +395,7 @@ class _UsageApi:
         if new_usage is None:
             return None
         self._usage = new_usage
-        return _usage_to_dict(new_usage)
+        return _usage_to_dict(new_usage, self._lang)
 
     def close(self) -> None:
         self._close_fn()
@@ -462,7 +464,8 @@ def push_usage_update(usage: UsageData) -> None:
         window = _singleton_windows.get("usage")
     if window is None:
         return
-    data = json.dumps(_usage_to_dict(usage))
+    lang = Config.load().language
+    data = json.dumps(_usage_to_dict(usage, lang))
     try:
         window.evaluate_js(f"window.__pushUsage && window.__pushUsage({data})")
     except Exception:
@@ -479,10 +482,12 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
         box: list = []
         width, height = 360, 400
         size = [width, height]
-        opacity = Config.load().usage_popup_opacity
+        config = Config.load()
+        opacity = config.usage_popup_opacity
+        lang = config.language
         opacity_fn = _box_opacity_setter(box)
-        api = _UsageApi(usage, on_refresh, _box_closer(box), _box_resizer(box, size), opacity, opacity_fn)
-        window = _new_window("Claude 사용량", "usage.html", api, width, height, _position_near_cursor(width, height))
+        api = _UsageApi(usage, on_refresh, _box_closer(box), _box_resizer(box, size), opacity, opacity_fn, lang)
+        window = _new_window(i18n.t("tray.tooltip_base", lang), "usage.html", api, width, height, _position_near_cursor(width, height))
         box.append(window)
         _apply_initial_opacity(window, opacity)
         return window
@@ -507,9 +512,11 @@ class _SettingsApi:
         return {
             "refresh_seconds": self._config.refresh_seconds,
             "tray_icon_style": self._config.tray_icon_style,
-            "style_labels": STYLE_LABELS,
+            "style_labels": i18n.tray_style_labels(self._config.language),
             "show_autostart": _IS_WINDOWS,
             "autostart_enabled": autostart.is_enabled() if _IS_WINDOWS else False,
+            "language": self._config.language,
+            "language_options": i18n.LANGUAGE_NAMES,
         }
 
     def save(self, payload: dict) -> None:
@@ -518,6 +525,9 @@ class _SettingsApi:
         except (TypeError, ValueError):
             pass
         self._config.tray_icon_style = payload.get("tray_icon_style") or DEFAULT_STYLE
+        language = payload.get("language")
+        if language in i18n.LANGUAGE_NAMES:
+            self._config.language = language
         self._config.save()
         if _IS_WINDOWS:
             if payload.get("autostart"):
@@ -542,10 +552,13 @@ def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
     def create() -> webview.Window:
         config = Config.load()
         box: list = []
-        width, height = 340, 440
+        # +90 over the pre-language-picker height (340x440) for the new
+        # language card, so it fits without immediately needing the body's
+        # scrollbar.
+        width, height = 340, 530
         size = [width, height]
         api = _SettingsApi(config, on_saved, _box_closer(box), _box_resizer(box, size))
-        window = _new_window("설정", "settings.html", api, width, height, _position_centered(width, height))
+        window = _new_window(i18n.t("tray.settings", config.language), "settings.html", api, width, height, _position_centered(width, height))
         box.append(window)
         return window
 
@@ -555,7 +568,7 @@ def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
 class _AccountApi:
     def __init__(
         self, email: Optional[str], is_logged_out: bool, on_switch: Callable, on_logout: Callable,
-        close_fn: Callable[[], None], resize_fn: Callable[[float, float], None],
+        close_fn: Callable[[], None], resize_fn: Callable[[float, float], None], lang: str,
     ):
         self._email = email
         self._is_logged_out = is_logged_out
@@ -563,9 +576,10 @@ class _AccountApi:
         self._on_logout = on_logout
         self._close_fn = close_fn
         self._resize_fn = resize_fn
+        self._lang = lang
 
     def get_initial_data(self) -> dict:
-        return {"email": self._email, "is_logged_out": self._is_logged_out}
+        return {"email": self._email, "is_logged_out": self._is_logged_out, "language": self._lang}
 
     def switch_account(self) -> None:
         self._on_switch()
@@ -590,9 +604,42 @@ def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch: Cal
         box: list = []
         width, height = 320, 300
         size = [width, height]
-        api = _AccountApi(email, is_logged_out, on_switch, on_logout, _box_closer(box), _box_resizer(box, size))
-        window = _new_window("계정", "account.html", api, width, height, _position_centered(width, height))
+        lang = Config.load().language
+        api = _AccountApi(email, is_logged_out, on_switch, on_logout, _box_closer(box), _box_resizer(box, size), lang)
+        window = _new_window(i18n.t("tray.account", lang), "account.html", api, width, height, _position_centered(width, height))
         box.append(window)
         return window
 
     _focus_or_create("account", create)
+
+
+class _SplashApi:
+    """The splash has nothing to call back into except which language to
+    render in -- captured at creation time since the window only lives a
+    few seconds, unlike the other popups there's no need to re-check
+    Config mid-flight."""
+
+    def __init__(self, lang: str):
+        self._lang = lang
+
+    def get_language(self) -> dict:
+        return {"language": self._lang}
+
+
+def show_splash(lang: str) -> webview.Window:
+    """Shown immediately at startup, before the (potentially slow) login
+    check and first usage fetch run on a background thread -- without it
+    there's no tray icon yet and no window on screen at all during that
+    gap, so the app looks like it silently failed to launch. Not
+    registered as a singleton window (see _focus_or_create) since it's
+    never reopened -- main.py holds the one reference it needs directly
+    and closes it itself once startup finishes."""
+    width, height = 260, 220
+    window = _new_window(
+        "Claude Usage Widget", "splash.html", _SplashApi(lang), width, height, _position_centered(width, height)
+    )
+    return window
+
+
+def close_splash(window: webview.Window) -> None:
+    _safe_destroy(window)

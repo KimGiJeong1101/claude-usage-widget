@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <link rel="stylesheet" href="common.css">
 <script src="common.js"></script>
+<script src="i18n.js"></script>
 <style>
   .usage-card {
     padding: 18px;
@@ -70,26 +71,26 @@
           <line x1="18" y1="20" x2="18" y2="4"/>
         </svg>
       </div>
-      <div class="title">Claude 사용량</div>
-      <button class="icon-btn tone-accent" id="btn-opacity" title="투명도">
+      <div class="title" data-i18n="usage.title">Claude 사용량</div>
+      <button class="icon-btn tone-accent" id="btn-opacity" title="투명도" data-i18n-title="usage.opacity_tooltip">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="9"/>
           <path d="M12 3a9 9 0 000 18z" fill="currentColor" stroke="none"/>
         </svg>
       </button>
-      <button class="icon-btn tone-accent" id="btn-pin" title="고정">
+      <button class="icon-btn tone-accent" id="btn-pin" title="고정" data-i18n-title="usage.pin_tooltip">
         <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path id="pin-path" d="M9 4h6l-1 6 3 2v2H7v-2l3-2z" fill="none"/>
           <line x1="12" y1="14" x2="9" y2="21"/>
         </svg>
       </button>
-      <button class="icon-btn tone-accent" id="btn-refresh" title="새로고침">
+      <button class="icon-btn tone-accent" id="btn-refresh" title="새로고침" data-i18n-title="usage.refresh_tooltip">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12a9 9 0 11-3-6.7"/>
           <polyline points="21 3 21 9 15 9"/>
         </svg>
       </button>
-      <button class="icon-btn tone-danger" id="btn-close" title="닫기">
+      <button class="icon-btn tone-danger" id="btn-close" title="닫기" data-i18n-title="common.close_tooltip">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M6 6l12 12M18 6L6 18"/>
         </svg>
@@ -103,7 +104,7 @@
       <div class="card usage-card" data-key="session">
         <div class="usage-row">
           <div class="usage-info">
-            <div class="usage-title">세션 (5시간)</div>
+            <div class="usage-title" data-i18n="usage.session_label">세션 (5시간)</div>
             <div class="usage-reset muted"></div>
           </div>
           <div class="ring">
@@ -118,7 +119,7 @@
       <div class="card usage-card" data-key="week">
         <div class="usage-row">
           <div class="usage-info">
-            <div class="usage-title">주간</div>
+            <div class="usage-title" data-i18n="usage.week_label">주간</div>
             <div class="usage-reset muted"></div>
           </div>
           <div class="ring">
@@ -131,7 +132,7 @@
         </div>
       </div>
     </div>
-    <div class="resize-grip" title="크기 조절">
+    <div class="resize-grip" title="크기 조절" data-i18n-title="common.resize_tooltip">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M19 13l-6 6M19 19h-4M19 19v-4"/>
       </svg>
@@ -265,6 +266,7 @@
 
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();
+    applyI18n(data.language || "ko");
     paint(data, true);
     const opacity = data.opacity ?? 100;
     opacityInput.value = opacity;

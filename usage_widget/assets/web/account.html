@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <link rel="stylesheet" href="common.css">
 <script src="common.js"></script>
+<script src="i18n.js"></script>
 <style>
   #status-label { margin: 0; }
   #status-value { margin: 6px 0 0; font-size: 13.5px; font-weight: 600; line-height: 1.4; word-break: break-all; }
@@ -20,8 +21,8 @@
           <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"></path>
         </svg>
       </div>
-      <div class="title">계정</div>
-      <button class="icon-btn tone-danger" id="btn-close" title="닫기">
+      <div class="title" data-i18n="account.title">계정</div>
+      <button class="icon-btn tone-danger" id="btn-close" title="닫기" data-i18n-title="common.close_tooltip">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M6 6l12 12M18 6L6 18"></path>
         </svg>
@@ -34,10 +35,10 @@
       </div>
       <div class="actions">
         <button class="primary" id="switch-btn">계정 변경</button>
-        <button class="secondary" id="logout-btn" style="display: none;">로그아웃</button>
+        <button class="secondary" id="logout-btn" style="display: none;" data-i18n="account.logout_button">로그아웃</button>
       </div>
     </div>
-    <div class="resize-grip" title="크기 조절">
+    <div class="resize-grip" title="크기 조절" data-i18n-title="common.resize_tooltip">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M19 13l-6 6M19 19h-4M19 19v-4"/>
       </svg>
@@ -59,11 +60,17 @@
 
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();
-    document.getElementById("status-label").textContent = data.is_logged_out ? "현재 상태" : "현재 로그인";
+    const lang = data.language || "ko";
+    applyI18n(lang);
+    document.getElementById("status-label").textContent = data.is_logged_out
+      ? i18nText(lang, "account.status_logged_out_label")
+      : i18nText(lang, "account.status_logged_in_label");
     document.getElementById("status-value").textContent = data.is_logged_out
-      ? "로그아웃됨"
-      : (data.email || "확인 중...");
-    document.getElementById("switch-btn").textContent = data.is_logged_out ? "로그인" : "계정 변경";
+      ? i18nText(lang, "account.logged_out_value")
+      : (data.email || i18nText(lang, "account.checking"));
+    document.getElementById("switch-btn").textContent = data.is_logged_out
+      ? i18nText(lang, "account.login_button")
+      : i18nText(lang, "account.switch_button");
     if (!data.is_logged_out) {
       document.getElementById("logout-btn").style.display = "";
     }

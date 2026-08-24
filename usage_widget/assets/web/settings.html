@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <link rel="stylesheet" href="common.css">
 <script src="common.js"></script>
+<script src="i18n.js"></script>
 <style>
   .card p.muted { margin: 8px 0 0; }
   .interval-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
@@ -23,8 +24,8 @@
           <line x1="4" y1="18" x2="20" y2="18"></line><circle cx="11" cy="18" r="2" fill="currentColor" stroke="none"></circle>
         </svg>
       </div>
-      <div class="title">설정</div>
-      <button class="icon-btn tone-danger" id="btn-close" title="닫기">
+      <div class="title" data-i18n="settings.title">설정</div>
+      <button class="icon-btn tone-danger" id="btn-close" title="닫기" data-i18n-title="common.close_tooltip">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M6 6l12 12M18 6L6 18"></path>
         </svg>
@@ -32,24 +33,28 @@
     </div>
     <div class="body">
       <div class="card">
-        <p class="field-label">자동갱신 주기</p>
-        <div class="interval-row">
-          <input type="number" id="interval" min="5" step="1">
-          <span>초</span>
-        </div>
-        <p class="muted">예: 900초 = 15분</p>
+        <p class="field-label" data-i18n="settings.language_label">언어</p>
+        <select id="language-select"></select>
       </div>
       <div class="card">
-        <p class="field-label">트레이 아이콘 스타일</p>
+        <p class="field-label" data-i18n="settings.refresh_interval_label">자동갱신 주기</p>
+        <div class="interval-row">
+          <input type="number" id="interval" min="5" step="1">
+          <span data-i18n="settings.seconds_unit">초</span>
+        </div>
+        <p class="muted" data-i18n="settings.refresh_interval_hint">예: 900초 = 15분</p>
+      </div>
+      <div class="card">
+        <p class="field-label" data-i18n="settings.tray_style_label">트레이 아이콘 스타일</p>
         <select id="style-select"></select>
         <div class="checkbox-row" id="autostart-row" style="margin-top: 14px;">
           <input type="checkbox" id="autostart">
-          <label for="autostart">PC 시작 시 자동 실행</label>
+          <label for="autostart" data-i18n="settings.autostart_label">PC 시작 시 자동 실행</label>
         </div>
       </div>
-      <button class="primary" id="save-btn">저장</button>
+      <button class="primary" id="save-btn" data-i18n="settings.save_button">저장</button>
     </div>
-    <div class="resize-grip" title="크기 조절">
+    <div class="resize-grip" title="크기 조절" data-i18n-title="common.resize_tooltip">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M19 13l-6 6M19 19h-4M19 19v-4"/>
       </svg>
@@ -59,6 +64,7 @@
 <script>
   const intervalInput = document.getElementById("interval");
   const styleSelect = document.getElementById("style-select");
+  const languageSelect = document.getElementById("language-select");
   const autostartRow = document.getElementById("autostart-row");
   const autostartCheckbox = document.getElementById("autostart");
 
@@ -71,12 +77,20 @@
       refresh_seconds: parseInt(intervalInput.value, 10) || 60,
       tray_icon_style: styleSelect.value,
       autostart: autostartCheckbox.checked,
+      language: languageSelect.value,
     });
     window.pywebview.api.close();
   });
 
+  // Re-translates this screen's own labels immediately as the dropdown
+  // changes, same "preview before you commit" idea as the opacity slider --
+  // saving is still required to persist it and to update the tray menu/other
+  // popups.
+  languageSelect.addEventListener("change", () => applyI18n(languageSelect.value));
+
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();
+    applyI18n(data.language || "ko");
     intervalInput.value = data.refresh_seconds;
     for (const [key, label] of Object.entries(data.style_labels)) {
       const opt = document.createElement("option");
@@ -85,6 +99,13 @@
       styleSelect.appendChild(opt);
     }
     styleSelect.value = data.tray_icon_style;
+    for (const [code, label] of Object.entries(data.language_options)) {
+      const opt = document.createElement("option");
+      opt.value = code;
+      opt.textContent = label;
+      languageSelect.appendChild(opt);
+    }
+    languageSelect.value = data.language;
     if (data.show_autostart) {
       autostartCheckbox.checked = data.autostart_enabled;
     } else {

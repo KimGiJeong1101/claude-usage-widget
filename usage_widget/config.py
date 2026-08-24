@@ -3,6 +3,7 @@
 import json
 from dataclasses import asdict, dataclass
 
+from usage_widget.i18n import DEFAULT_LANGUAGE
 from usage_widget.paths import config_path
 from usage_widget.tray_icon import DEFAULT_STYLE as DEFAULT_TRAY_ICON_STYLE
 
@@ -18,6 +19,7 @@ class Config:
     # this; settings/account aren't looked at often enough to bother (see
     # claude-usage-widget-plan.md 13.12).
     usage_popup_opacity: int = DEFAULT_USAGE_POPUP_OPACITY
+    language: str = DEFAULT_LANGUAGE
 
     @classmethod
     def load(cls) -> "Config":
