@@ -350,7 +350,9 @@ def _build_menu() -> pystray.Menu:
         pystray.MenuItem(lambda item: i18n.t("tray.open", Config.load().language), _on_open, default=True),
         pystray.MenuItem(lambda item: i18n.t("tray.settings", Config.load().language), _on_settings),
         pystray.MenuItem(lambda item: i18n.t("tray.account", Config.load().language), _on_switch_account),
+        pystray.Menu.SEPARATOR,
         pystray.MenuItem(_update_menu_text, _on_update_click, enabled=_update_menu_enabled),
+        pystray.Menu.SEPARATOR,
         pystray.MenuItem(lambda item: i18n.t("tray.quit", Config.load().language), _on_quit),
     )
 
