@@ -19,7 +19,7 @@ from typing import Optional
 
 import pystray
 
-from usage_widget import __version__, i18n
+from usage_widget import __version__, i18n, single_instance
 from usage_widget.auth import has_saved_session, login_and_save_session
 from usage_widget.config import Config
 from usage_widget.fetcher import SessionExpiredError, UsageData, fetch_account_email, fetch_usage
@@ -367,6 +367,15 @@ def run() -> None:
     renders (webview.create_window()/destroy() are documented safe to call
     off the main thread -- see webui.py's module docstring)."""
     global _latest_usage
+    if not single_instance.acquire():
+        # Another instance already holds the lock -- launching one exe
+        # twice (a habitual double-click, autostart racing a manual
+        # launch) used to spawn a fully independent second process, each
+        # with its own tray icon and its own PyInstaller onefile temp
+        # extraction directory contending with the other's. Exiting
+        # quietly here is the whole fix: the already-running instance is
+        # unaffected and still reachable from its own tray icon.
+        return
     cleanup_stale_update_files()
 
     init_gui()
