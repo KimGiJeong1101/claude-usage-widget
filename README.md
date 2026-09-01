@@ -26,6 +26,10 @@
   <a href="#참고">참고</a>
 </p>
 
+<p align="center">
+  <sub>한국어 · <a href="README.en.md">English</a></sub>
+</p>
+
 <br>
 
 ## ✨ 특징
@@ -118,6 +122,12 @@ PC를 켤 때 자동으로 실행할지 여부를 설정에서 켜고 끌 수 �
 한국어 / English / 日本語 / 中文(简体) 4개 언어를 지원합니다. 설정에서 바로 바꿀 수 있고, 트레이 메뉴에는 즉시 반영돼요.
 
 </td>
+<td width="33%" valign="top">
+
+### 🔒 중복 실행 방지
+이미 실행 중이면 자동으로 감지해서 안내 후 조용히 종료합니다. 트레이 아이콘이 여러 개 뜨는 일이 없어요.
+
+</td>
 </tr>
 </table>
 
@@ -174,13 +184,13 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 | :---: | :---: | :---: |
 | 💻 Windows | 설치형 (.msi, 시작 메뉴·바탕화면 바로가기 생성) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget.msi)** |
 | 💻 Windows | 포터블 (.zip) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-win.zip)** |
-| 🍎 macOS | 디스크 이미지 (.dmg) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.dmg)** |
-| 🍎 macOS | 앱 번들 (.zip) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.zip)** |
+| 🍎 macOS (Apple Silicon) | 디스크 이미지 (.dmg) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.dmg)** |
+| 🍎 macOS (Apple Silicon) | 앱 번들 (.zip) | **[다운로드](https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-mac.zip)** |
 
 </div>
 
 > [!WARNING]
-> **macOS 빌드는 아직 실제 Mac에서 동작 검증이 되지 않았습니다.** GitHub Actions로 macOS 러너에서 빌드는 되지만, 실사용 테스트 전이라 다운로드해도 정상적으로 실행되지 않을 수 있습니다. macOS에서 문제를 겪으셨다면 이슈로 알려주세요.
+> **macOS 빌드는 아직 실제 Mac에서 동작 검증이 안 됐고, 현재 Apple Silicon(M1 이상) 전용입니다.** GitHub Actions의 `macos-latest` 러너가 arm64라 빌드 자체가 그렇게 나옵니다 — Intel Mac에서는 아키텍처가 안 맞아 실행 자체가 안 됩니다. macOS에서 문제를 겪으셨다면 이슈로 알려주세요.
 
 <details>
 <summary><b>실행 시 경고가 뜬다면?</b></summary>
@@ -263,7 +273,7 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
   방식이 안 통해서 아직 다운로드 페이지 안내로만 동작합니다.
 - 릴리즈에는 `ClaudeUsageWidget-win.zip`처럼 고정된 이름(자동 업데이트/README
   다운로드 링크가 항상 최신을 가리키기 위해 절대 안 바뀌는 이름)과, 사람이 알아보기
-  쉽게 버전이 붙은 사본(`ClaudeUsageWidget-0.3.1-win.zip`)이 같이 올라갑니다. 후자는
+  쉽게 버전이 붙은 사본(`ClaudeUsageWidget-0.3.5-win.zip`)이 같이 올라갑니다. 후자는
   [Releases 페이지](https://github.com/KimGiJeong1101/claude-usage-widget/releases)에서만
   볼 수 있습니다.
 - 실행하면 로그인 확인/첫 사용량 조회가 끝나기 전까지 트레이 아이콘 자체가 아직
@@ -287,6 +297,15 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
   무시하고, JSON 자체가 깨졌거나 값 타입이 안 맞는 등 아예 파싱이 안 되는 경우도
   크래시 대신 기본값으로 조용히 폴백합니다 — 설정값이 날아가는 정도로 끝나고, 로그인
   세션(별도 파일)에는 영향이 없습니다.
+- 중복 실행 방지는 로컬 TCP 포트(`127.0.0.1`의 고정 포트) 바인딩을 뮤텍스처럼
+  써서 구현했습니다 — Windows 네임드 뮤텍스나 유닉스 PID 파일과 달리 OS 구분
+  없이 동일하게 동작하고, 프로세스가 죽어도 OS가 포트를 자동으로 풀어줘서 별도
+  정리 로직이 필요 없습니다. 이미 실행 중이면 두 번째 실행은 `init_gui()`도 뜨기
+  전에 `tkinter` 네이티브 메시지박스로 안내 후 즉시 종료합니다(이 프로세스는
+  어차피 바로 끝날 거라 pywebview를 부팅시킬 필요가 없어서).
+- 자동 업데이트가 실패하면(너무 오래된 설치본, 네트워크 문제 등) 실패 알림과
+  함께 GitHub Releases 페이지를 자동으로 열어서, 자동 업데이트가 안 되더라도
+  수동 다운로드로 바로 이어지게 합니다.
 
 </details>
 
