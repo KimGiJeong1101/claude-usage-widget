@@ -246,6 +246,15 @@ def _start_update(icon: pystray.Icon) -> None:
             icon.notify(
                 i18n.t("notify.update_failed_msg", lang, error=exc), i18n.t("notify.update_failed_title", lang)
             )
+            # Whatever broke -- a very old install whose self-update
+            # mechanism predates the current one, a network hiccup, a
+            # permissions issue -- the notification alone doesn't give
+            # anyone a next step. Falling back to the releases page (same
+            # as the non-Windows/non-frozen path already does) means a
+            # failed automatic update always still ends somewhere a
+            # manual download is one click away, instead of leaving
+            # someone stuck on the toast text alone.
+            webbrowser.open(RELEASES_URL)
             return
         # apply_update() only staged the download and spawned a detached
         # helper that's waiting on *this* process's PID to exit -- this
@@ -357,6 +366,26 @@ def _build_menu() -> pystray.Menu:
     )
 
 
+def _notify_already_running() -> None:
+    """A plain native message box, not a pywebview popup -- this fires
+    before init_gui()/run_gui_loop() have run at all, and this process is
+    about to exit right after anyway, so booting up the app's own webview
+    machinery just to show one line isn't worth it. tkinter ships with
+    Python itself (no extra dependency to add back after the popups moved
+    to pywebview) and this is the one place left that still needs a
+    blocking native dialog before any of that exists yet."""
+    import tkinter
+    from tkinter import messagebox
+
+    lang = Config.load().language
+    root = tkinter.Tk()
+    root.withdraw()
+    try:
+        messagebox.showinfo(i18n.t("tray.tooltip_base", lang), i18n.t("dup.already_running_msg", lang))
+    finally:
+        root.destroy()
+
+
 def run() -> None:
     """Startup used to block the main thread on the login check and first
     usage fetch *before* pywebview's event loop (run_gui_loop) even
@@ -370,11 +399,14 @@ def run() -> None:
     if not single_instance.acquire():
         # Another instance already holds the lock -- launching one exe
         # twice (a habitual double-click, autostart racing a manual
-        # launch) used to spawn a fully independent second process, each
+        # launch, or running a newly-downloaded exe while an older one is
+        # still up) used to spawn a fully independent second process, each
         # with its own tray icon and its own PyInstaller onefile temp
-        # extraction directory contending with the other's. Exiting
-        # quietly here is the whole fix: the already-running instance is
-        # unaffected and still reachable from its own tray icon.
+        # extraction directory contending with the other's. Quitting is
+        # the whole fix, but doing that *silently* just looked like the
+        # double-click did nothing at all -- one plain message box (before
+        # any of the app's own GUI machinery is up) is enough to say why.
+        _notify_already_running()
         return
     cleanup_stale_update_files()
 
