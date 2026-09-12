@@ -22,6 +22,8 @@
   <a href="#-미리보기">미리보기</a> •
   <a href="#-다운로드">다운로드</a> •
   <a href="#사용법">사용법</a> •
+  <a href="#-기술-스택">기술 스택</a> •
+  <a href="#-아키텍처">아키텍처</a> •
   <a href="#-개발자용">개발자용</a> •
   <a href="#참고">참고</a>
 </p>
@@ -224,11 +226,93 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 
 <br>
 
+## 🔧 기술 스택
+
+| 영역 | 사용 기술 |
+| --- | --- |
+| 언어 | Python 3.10+ |
+| 트레이 아이콘 | [`pystray`](https://github.com/moses-palmer/pystray) + [Pillow](https://python-pillow.org)로 그때그때 렌더링 |
+| 팝업 UI | [`pywebview`](https://pywebview.flowrl.com/) — OS 내장 웹뷰(WebView2 / WKWebView) 위에 순수 HTML/CSS/JS |
+| 사용량 조회 · 로그인 | [Playwright](https://playwright.dev)의 headless 브라우저 컨텍스트 (실제 Chrome 채널 사용) |
+| 패키징 | [PyInstaller](https://pyinstaller.org) (onefile) |
+| Windows 설치형 | [WiX Toolset](https://wixtoolset.org) v5 |
+| CI/CD | GitHub Actions (`windows-latest` + `macos-latest` 자동 빌드 → GitHub Releases) |
+| 폰트 | [Pretendard](https://github.com/orioncactus/pretendard) (SIL OFL 1.1, 번들 포함) |
+
+<br>
+
+## 🏗️ 아키텍처
+
+```mermaid
+flowchart TB
+    subgraph Proc["claude-usage-widget.exe (하나의 파이썬 프로세스)"]
+        Splash["시작 로딩 화면\n(pywebview)"]
+        Tray["트레이 아이콘\n(pystray)"]
+        Refresh["백그라운드 갱신 스레드\n(N초마다)"]
+        UpdateLoop["업데이트 확인 스레드\n(6시간마다)"]
+        Popups["팝업 3개\n사용량 · 설정 · 계정\n(pywebview)"]
+    end
+
+    subgraph LocalData["로컬 사용자 데이터 폴더"]
+        Config[("config.json\n설정값")]
+        Session[("session_state.json\n로그인 세션 쿠키")]
+    end
+
+    subgraph External["외부"]
+        Chrome["실제 Chrome\n(최초 로그인 전용)"]
+        ClaudeAPI["claude.ai 비공식 API\n(Cloudflare 방어 우회:\nheadless Playwright)"]
+        GitHub["GitHub Releases API"]
+    end
+
+    Splash -- "로그인 확인 + 첫 조회 끝나면" --> Tray
+    Tray -- "좌/우클릭" --> Popups
+    Popups <--> Config
+    Refresh -- "세션 만료 시에만" --> Chrome
+    Chrome --> Session
+    Session --> Refresh
+    Refresh -- "headless 브라우저 컨텍스트" --> ClaudeAPI
+    Refresh --> Tray
+    UpdateLoop --> GitHub
+    UpdateLoop -- "새 버전 발견" --> Tray
+```
+
+- **claude.ai에는 공식 API가 없어서**, headless Playwright 컨텍스트로 claude.ai가 내부적으로
+  쓰는 비공식 엔드포인트를 그대로 호출합니다. 실제 브라우저 창(Chrome)은 최초 로그인
+  때만 뜨고, 그때 저장된 세션 쿠키로 이후 갱신을 처리합니다.
+- **별도 서버가 없습니다** — 설정/세션은 전부 로컬 파일, 업데이트 확인은 GitHub
+  Releases API를 직접 호출합니다.
+- 트레이 아이콘·백그라운드 스레드들·팝업 창들은 전부 **같은 프로세스 안의 스레드**이고,
+  pywebview 창들끼리는 `webui.py`의 js_api 브릿지를 통해 파이썬과 통신합니다.
+
+<br>
+
 ## 🛠️ 개발자용
 
 <details>
 <summary><b>동작 방식 (자세히 보기)</b></summary>
 <br>
+
+**핵심 로직 뜯어보기 — 자동 업데이트가 실제로 재시작하는 순서**
+
+이 프로젝트에서 가장 복잡한 부분(세 차례 버그를 거쳐 지금 형태가 된)만 흐름도로 정리했습니다.
+
+```mermaid
+flowchart TD
+    A["우클릭 → 지금 업데이트"] --> B["최신 zip 다운로드,\n새 exe를 옆에 스테이징"]
+    B --> C["relaunch 배치 파일 작성\n(PYINSTALLER_RESET_ENVIRONMENT=1로\ncmd.exe를 detached 실행)"]
+    C --> D["이 프로세스 stop() + 완전 종료"]
+    D --> E["cmd.exe가 이 프로세스의\nPID 종료를 대기"]
+    E --> F["새 exe 파일을\n원래 경로로 이동"]
+    F --> G["새 exe 실행"]
+    G --> H["timeout 2초\n(새 exe 부트로더가 부모 정보를\n조회할 시간을 벌어줌)"]
+    H --> I["배치 파일 자기 자신 삭제"]
+```
+
+실행 중인 프로세스가 스스로를 새 exe로 바꿔치기하고 곧장 재실행하는 방식은 PyInstaller
+6.9+ 부트로더의 보안 검증에 걸려서, 아예 무관한 cmd.exe를 부모로 끼워 우회한 것과
+(D→E), 자식 프로세스가 부모의 환경변수를 물려받지 않게 한 것(C), 부모가 너무 빨리
+사라지지 않게 한 것(H) — 이 세 가지가 각각 실사용 중 발견된 서로 다른 크래시의
+수정 사항입니다. 아래 항목들에서 더 자세히 설명합니다.
 
 - claude.ai는 이 사용량 정보를 가져올 수 있는 공식 공개 API를 제공하지 않습니다.
 - 그래서 이 프로젝트는 claude.ai 웹 앱이 내부적으로 호출하는 비공식 엔드포인트
@@ -306,6 +390,42 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 - 자동 업데이트가 실패하면(너무 오래된 설치본, 네트워크 문제 등) 실패 알림과
   함께 GitHub Releases 페이지를 자동으로 열어서, 자동 업데이트가 안 되더라도
   수동 다운로드로 바로 이어지게 합니다.
+
+</details>
+
+<details>
+<summary><b>📁 프로젝트 구조</b></summary>
+<br>
+
+```
+usage_widget/
+├─ main.py              # 진입점 — 트레이 아이콘, 백그라운드 스레드, 메뉴 콜백
+├─ webui.py              # pywebview 창 생성/위치/js_api 브릿지 (팝업 4개 공용)
+├─ fetcher.py            # claude.ai 비공식 API 호출 (Playwright headless)
+├─ auth.py               # 최초 로그인 (실제 Chrome) + 세션 쿠키 저장
+├─ config.py             # 설정값 로드/저장 (config.json)
+├─ i18n.py               # 트레이/알림 텍스트 번역 테이블 (ko/en/ja/zh-CN)
+├─ tray_icon.py          # 트레이 아이콘 이미지 렌더링 (Pillow, 5가지 스타일)
+├─ self_update.py        # 자동 업데이트 다운로드/스테이징/재시작 헬퍼
+├─ update_check.py       # GitHub Releases API로 최신 버전 확인
+├─ single_instance.py    # 중복 실행 방지 (로컬 포트 바인딩)
+├─ autostart.py          # Windows 시작프로그램 등록 (레지스트리)
+├─ paths.py              # OS별 로컬 데이터 폴더 경로
+└─ assets/
+   ├─ web/               # 팝업 4개 (HTML/CSS/JS)
+   │  ├─ usage.html / settings.html / account.html / splash.html
+   │  ├─ common.css / common.js    # 공통 스타일 · 리사이즈 그립
+   │  └─ i18n.js                    # 팝업용 번역 테이블 (i18n.py와 별개, 손으로 동기화)
+   └─ fonts/             # Pretendard (번들 폰트)
+
+installer/
+└─ ClaudeUsageWidget.wxs  # WiX MSI 설치 스크립트
+
+.github/workflows/
+└─ release.yml            # v* 태그 push 시 Windows/macOS 빌드 + GitHub Release
+
+run.py                     # PyInstaller 진입점 (usage_widget.main.run 호출)
+```
 
 </details>
 

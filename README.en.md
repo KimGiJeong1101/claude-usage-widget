@@ -22,6 +22,8 @@
   <a href="#-preview">Preview</a> •
   <a href="#-download">Download</a> •
   <a href="#usage">Usage</a> •
+  <a href="#-tech-stack">Tech Stack</a> •
+  <a href="#-architecture">Architecture</a> •
   <a href="#-for-developers">For Developers</a> •
   <a href="#notes">Notes</a>
 </p>
@@ -224,11 +226,96 @@ A brief loading screen appears right after launch; the first time, a login windo
 
 <br>
 
+## 🔧 Tech Stack
+
+| Area | Technology |
+| --- | --- |
+| Language | Python 3.10+ |
+| Tray icon | [`pystray`](https://github.com/moses-palmer/pystray) + [Pillow](https://python-pillow.org), rendered on the fly |
+| Popup UI | [`pywebview`](https://pywebview.flowrl.com/) — plain HTML/CSS/JS over the OS's built-in webview (WebView2 / WKWebView) |
+| Usage fetch & login | [Playwright](https://playwright.dev)'s headless browser context (real Chrome channel) |
+| Packaging | [PyInstaller](https://pyinstaller.org) (onefile) |
+| Windows installer | [WiX Toolset](https://wixtoolset.org) v5 |
+| CI/CD | GitHub Actions (`windows-latest` + `macos-latest` auto-build → GitHub Releases) |
+| Font | [Pretendard](https://github.com/orioncactus/pretendard) (SIL OFL 1.1, bundled) |
+
+<br>
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart TB
+    subgraph Proc["claude-usage-widget.exe (one Python process)"]
+        Splash["Startup loading screen\n(pywebview)"]
+        Tray["Tray icon\n(pystray)"]
+        Refresh["Background refresh thread\n(every N seconds)"]
+        UpdateLoop["Update-check thread\n(every 6 hours)"]
+        Popups["3 popups\nusage · settings · account\n(pywebview)"]
+    end
+
+    subgraph LocalData["Local per-user data folder"]
+        Config[("config.json\nsettings")]
+        Session[("session_state.json\nlogin session cookie")]
+    end
+
+    subgraph External["External"]
+        Chrome["Real Chrome\n(first login only)"]
+        ClaudeAPI["claude.ai unofficial API\n(Cloudflare bypass via\nheadless Playwright)"]
+        GitHub["GitHub Releases API"]
+    end
+
+    Splash -- "once login check + first fetch finish" --> Tray
+    Tray -- "left/right-click" --> Popups
+    Popups <--> Config
+    Refresh -- "only when session expired" --> Chrome
+    Chrome --> Session
+    Session --> Refresh
+    Refresh -- "headless browser context" --> ClaudeAPI
+    Refresh --> Tray
+    UpdateLoop --> GitHub
+    UpdateLoop -- "new version found" --> Tray
+```
+
+- **claude.ai has no official API**, so a headless Playwright context calls the same
+  unofficial endpoint claude.ai's own web app uses internally. A real browser
+  window (Chrome) only opens for the very first login; the session cookie it
+  saves drives every refresh after that.
+- **There's no separate server** — settings/session are plain local files, and
+  update checks hit the GitHub Releases API directly.
+- The tray icon, background threads, and popup windows are all **threads inside
+  the same process** — the pywebview windows talk back to Python through the
+  js_api bridge in `webui.py`.
+
+<br>
+
 ## 🛠️ For Developers
 
 <details>
 <summary><b>How it works (details)</b></summary>
 <br>
+
+**Core logic — how the auto-update relaunch is actually sequenced**
+
+The single most complex part of this codebase (shaped by three separate bugs found in real use), as a flowchart.
+
+```mermaid
+flowchart TD
+    A["Right-click → Update now"] --> B["Download the latest zip,\nstage the new exe alongside"]
+    B --> C["Write a relaunch script\n(spawns cmd.exe detached with\nPYINSTALLER_RESET_ENVIRONMENT=1)"]
+    C --> D["This process stop()s and\nfully exits"]
+    D --> E["cmd.exe waits for\nthis process's PID to exit"]
+    E --> F["Move the new exe\ninto place"]
+    F --> G["Launch the new exe"]
+    G --> H["timeout for 2s\n(gives the new exe's bootloader\ntime to query its parent)"]
+    H --> I["The script deletes itself"]
+```
+
+A running process replacing itself with a new exe and relaunching immediately
+trips PyInstaller 6.9+'s bootloader security check — routing through an
+unrelated parent process instead (D→E) is what sidesteps it, not letting the
+child inherit the parent's environment (C) is a separate fix, and giving the
+parent time before it disappears (H) is a third, independent one — each was a
+different crash found in real use. More detail below.
 
 - claude.ai doesn't offer an official public API for this usage data.
 - So this project replicates the unofficial endpoint the claude.ai web app itself calls
@@ -322,6 +409,42 @@ A brief loading screen appears right after launch; the first time, a login windo
   failure notification is followed by opening the GitHub Releases page
   automatically, so a failed automatic update still ends with manual download
   one click away.
+
+</details>
+
+<details>
+<summary><b>📁 Project structure</b></summary>
+<br>
+
+```
+usage_widget/
+├─ main.py              # Entry point — tray icon, background threads, menu callbacks
+├─ webui.py              # pywebview window creation/positioning/js_api bridge (shared by all 4 popups)
+├─ fetcher.py            # Calls the claude.ai unofficial API (headless Playwright)
+├─ auth.py               # First-time login (real Chrome) + saves the session cookie
+├─ config.py             # Loads/saves settings (config.json)
+├─ i18n.py               # Tray/notification translation table (ko/en/ja/zh-CN)
+├─ tray_icon.py          # Renders the tray icon image (Pillow, 5 styles)
+├─ self_update.py        # Downloads/stages/relaunches for auto-update
+├─ update_check.py       # Checks the latest version via the GitHub Releases API
+├─ single_instance.py    # Single-instance guard (local port binding)
+├─ autostart.py          # Registers Windows launch-at-startup (registry)
+├─ paths.py              # Per-OS local data folder paths
+└─ assets/
+   ├─ web/               # The 4 popups (HTML/CSS/JS)
+   │  ├─ usage.html / settings.html / account.html / splash.html
+   │  ├─ common.css / common.js    # Shared styling · resize grip
+   │  └─ i18n.js                    # Popup-side translation table (separate from i18n.py, synced by hand)
+   └─ fonts/             # Pretendard (bundled font)
+
+installer/
+└─ ClaudeUsageWidget.wxs  # WiX MSI installer script
+
+.github/workflows/
+└─ release.yml            # Builds Windows/macOS and cuts a GitHub Release on a v* tag push
+
+run.py                     # PyInstaller entry point (calls usage_widget.main.run)
+```
 
 </details>
 
