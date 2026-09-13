@@ -90,7 +90,10 @@ def _position_near_cursor(width: int, height: int) -> tuple:
     tkinter flyout: it has to land under the cursor immediately since it
     closes as soon as the pointer leaves it. Falls back to pywebview's own
     default placement (None, None) on platforms this hasn't been
-    implemented for yet (non-Windows)."""
+    implemented for yet (non-Windows). Superseded by _position_near_tray
+    as the usage popup's actual positioning (see its docstring for why);
+    kept as that function's own fallback if the taskbar's work area can't
+    be read for some reason."""
     cursor = _cursor_pos()
     screen = _screen_size()
     if cursor is None or screen is None:
@@ -101,6 +104,108 @@ def _position_near_cursor(width: int, height: int) -> tuple:
 
     y = cursor_y - height + gap if cursor_y > screen_h / 2 else cursor_y - gap
     x = cursor_x - width + gap if cursor_x > screen_w / 2 else cursor_x - gap
+    x = max(0, min(x, screen_w - width))
+    y = max(0, min(y, screen_h - height))
+    return int(x), int(y)
+
+
+_SPI_GETWORKAREA = 0x0030
+
+
+def _work_area() -> Optional[tuple]:
+    """The desktop rectangle Windows keeps clear of the taskbar -- the same
+    value Windows itself uses so a maximized window doesn't slide under
+    it. Reading this (rather than assuming the taskbar is at the bottom of
+    a screen the size of GetSystemMetrics) is what makes _position_near_tray
+    work regardless of which edge the taskbar is docked to, whether it
+    auto-hides, or which monitor is primary."""
+    if not _IS_WINDOWS:
+        return None
+
+    class _Rect(ctypes.Structure):
+        _fields_ = [
+            ("left", ctypes.c_long),
+            ("top", ctypes.c_long),
+            ("right", ctypes.c_long),
+            ("bottom", ctypes.c_long),
+        ]
+
+    rect = _Rect()
+    if not ctypes.windll.user32.SystemParametersInfoW(_SPI_GETWORKAREA, 0, ctypes.byref(rect), 0):
+        return None
+    return rect.left, rect.top, rect.right, rect.bottom
+
+
+def _macos_menubar_position(width: int, height: int) -> Optional[tuple]:
+    """Best-effort macOS analog of _position_near_tray: anchors near the
+    top-right of the screen, where menu bar status items (this app's tray
+    icon included) live, mirroring how a native menu bar dropdown (Wi-Fi,
+    Control Center, battery) always opens directly under the menu bar
+    rather than following the cursor.
+
+    UNVERIFIED -- there has been no real Mac available to test this
+    against. AppKit's coordinate origin is the bottom-left of the screen
+    (unlike Windows' top-left), which the flip below tries to account for
+    to match the top-left-origin (x, y) pywebview's create_window() expects
+    on every platform; that flip is the part most likely to need a
+    real-machine fix."""
+    if _IS_WINDOWS:
+        return None
+    try:
+        from AppKit import NSScreen
+    except ImportError:
+        return None
+    screen = NSScreen.mainScreen()
+    if screen is None:
+        return None
+    full = screen.frame()
+    visible = screen.visibleFrame()  # excludes the menu bar (and Dock, if docked)
+    screen_w, screen_h = full.size.width, full.size.height
+    gap = 8
+
+    menu_bar_bottom_from_top = screen_h - (visible.origin.y + visible.size.height)
+    x = screen_w - width - gap
+    y = menu_bar_bottom_from_top + gap
+    x = max(0, min(x, screen_w - width))
+    y = max(0, min(y, screen_h - height))
+    return int(x), int(y)
+
+
+def _position_near_tray(width: int, height: int) -> tuple:
+    """Anchors a popup right next to the system tray/menu bar, the way a
+    native OS flyout (Windows' volume/network/battery, macOS's Wi-Fi/
+    Control Center) does -- next to wherever that actually is, rather than
+    "wherever the cursor happened to be" when the click landed. A friend's
+    feedback on the original cursor-following behavior was that it didn't
+    read as a normal Windows flyout; anchoring to the taskbar's real work
+    area (instead of a screen-size heuristic) also incidentally fixes
+    cases the old approach got wrong -- a taskbar docked somewhere other
+    than the bottom, or a click that lands via the right-click menu's
+    "열기" item rather than directly on the tray icon, where the cursor
+    isn't necessarily anywhere near the tray at all."""
+    work = _work_area()
+    screen = _screen_size()
+    if work is None or screen is None:
+        macos_pos = _macos_menubar_position(width, height)
+        if macos_pos is not None:
+            return macos_pos
+        return _position_near_cursor(width, height)
+
+    left, top, right, bottom = work
+    screen_w, screen_h = screen
+    gap = 12
+
+    if bottom < screen_h:  # taskbar docked at the bottom (by far the most common)
+        x, y = right - width - gap, bottom - height - gap
+    elif top > 0:  # taskbar docked at the top
+        x, y = right - width - gap, top + gap
+    elif right < screen_w:  # taskbar docked on the right
+        x, y = right - width - gap, bottom - height - gap
+    elif left > 0:  # taskbar docked on the left
+        x, y = left + gap, bottom - height - gap
+    else:  # no taskbar edge detected -- fall back to the bottom-right corner
+        x, y = screen_w - width - gap, screen_h - height - gap
+
     x = max(0, min(x, screen_w - width))
     y = max(0, min(y, screen_h - height))
     return int(x), int(y)
@@ -487,7 +592,7 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
         lang = config.language
         opacity_fn = _box_opacity_setter(box)
         api = _UsageApi(usage, on_refresh, _box_closer(box), _box_resizer(box, size), opacity, opacity_fn, lang)
-        window = _new_window(i18n.t("tray.tooltip_base", lang), "usage.html", api, width, height, _position_near_cursor(width, height))
+        window = _new_window(i18n.t("tray.tooltip_base", lang), "usage.html", api, width, height, _position_near_tray(width, height))
         box.append(window)
         _apply_initial_opacity(window, opacity)
         return window
