@@ -53,7 +53,7 @@ Open the usage / settings / account popups at the same time. Opening the same on
 <td width="33%" valign="top">
 
 ### 📌 Pin a popup open
-By default a popup closes as soon as the cursor leaves it; the pin button keeps it open.
+By default a popup closes as soon as it loses focus (you click elsewhere); the pin button keeps it open.
 
 </td>
 </tr>
@@ -143,7 +143,7 @@ Detects if it's already running and quits quietly after letting you know, instea
 <tr>
 <td align="center" width="50%">
 <img src="docs/screenshot.png" width="300" alt="Usage popup"><br>
-<sub>Usage popup — opens near where you clicked, and closes automatically once the cursor leaves unless pinned with 📌</sub>
+<sub>Usage popup — opens near the taskbar/tray icon, and closes automatically when you click elsewhere unless pinned with 📌</sub>
 </td>
 <td align="center" width="50%">
 <img src="docs/screenshot-opacity.png" width="300" alt="Opacity control"><br>
@@ -215,7 +215,7 @@ A brief loading screen appears right after launch; the first time, a login windo
 
 | Action | Result |
 | --- | --- |
-| Left-click | Opens the session/weekly usage % and reset-time popup (appears near your click, closes automatically once the cursor leaves) |
+| Left-click | Opens the session/weekly usage % and reset-time popup (appears near the taskbar/tray icon, closes automatically when you click elsewhere) |
 | 💧 / 📌 / ⟳ on the popup | Expand the opacity slider / pin the popup open / refresh immediately |
 | Bottom-right handle on a popup | Drag to resize |
 | Right-click → Open | Same as left-click — opens the usage popup |
@@ -369,7 +369,7 @@ different crash found in real use. More detail below.
 - Releases ship both a fixed filename (`ClaudeUsageWidget-win.zip`, for example —
   never renamed, since the auto-updater and README download links depend on it
   always pointing at the latest release) and a versioned copy
-  (`ClaudeUsageWidget-0.3.5-win.zip`) for humans to tell builds apart. The latter
+  (`ClaudeUsageWidget-0.3.6-win.zip`) for humans to tell builds apart. The latter
   is only visible on the [Releases page](https://github.com/KimGiJeong1101/claude-usage-widget/releases).
 - There used to be a gap right after launch — before the login check and first
   usage fetch finished, the tray icon didn't exist yet, so nothing showed up on
