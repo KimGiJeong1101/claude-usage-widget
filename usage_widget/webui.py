@@ -57,7 +57,7 @@ def shutdown_gui() -> None:
     behind (visible, orphaned) after "종료" was the actual bug reported.
     Closing them all first, before the root, is what actually clears them
     off the screen."""
-    with _singleton_lock:
+    with _singleton_dict_lock:
         windows = list(_singleton_windows.values())
     for window in windows:
         _safe_destroy(window)
@@ -533,7 +533,25 @@ class _UsageApi:
 
 
 _singleton_windows: dict = {}
-_singleton_lock = threading.Lock()
+# Guards direct reads/writes of _singleton_windows itself (held only
+# briefly) -- separate from the per-key locks below, which instead guard
+# the (potentially slow) create() call so unrelated popup kinds don't wait
+# on each other.
+_singleton_dict_lock = threading.Lock()
+_singleton_locks: dict = {}
+_singleton_locks_meta_lock = threading.Lock()
+
+
+def _lock_for(key: str) -> threading.Lock:
+    """One lock per popup kind, not one shared by all of them -- otherwise
+    constructing a slow-to-open popup (e.g. usage, on WebView2/WinForms'
+    first init) would block an unrelated one (e.g. settings) from even
+    starting to open if the two clicks landed close together, despite
+    them being independent singleton slots."""
+    with _singleton_locks_meta_lock:
+        if key not in _singleton_locks:
+            _singleton_locks[key] = threading.Lock()
+        return _singleton_locks[key]
 
 
 def _focus_or_create(key: str, create: Callable[[], webview.Window]) -> None:
@@ -541,11 +559,14 @@ def _focus_or_create(key: str, create: Callable[[], webview.Window]) -> None:
     Without this, clicking the tray icon (or a menu item) again while its
     popup was already open spawned a second overlapping copy instead of
     just bringing the existing one forward."""
-    with _singleton_lock:
-        existing = _singleton_windows.get(key)
+    lock = _lock_for(key)
+    with lock:
+        with _singleton_dict_lock:
+            existing = _singleton_windows.get(key)
         if existing is None:
             window = create()
-            _singleton_windows[key] = window
+            with _singleton_dict_lock:
+                _singleton_windows[key] = window
     if existing is not None:
         try:
             existing.show()
@@ -554,9 +575,10 @@ def _focus_or_create(key: str, create: Callable[[], webview.Window]) -> None:
         return
 
     def _unregister():
-        with _singleton_lock:
-            if _singleton_windows.get(key) is window:
-                del _singleton_windows[key]
+        with lock:
+            with _singleton_dict_lock:
+                if _singleton_windows.get(key) is window:
+                    del _singleton_windows[key]
 
     window.events.closed += _unregister
 
@@ -565,7 +587,7 @@ def push_usage_update(usage: UsageData) -> None:
     """Called by main.py after each successful background fetch so an
     already-open usage popup reflects it immediately, instead of only on
     the next manual refresh click."""
-    with _singleton_lock:
+    with _singleton_dict_lock:
         window = _singleton_windows.get("usage")
     if window is None:
         return

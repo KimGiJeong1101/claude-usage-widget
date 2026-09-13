@@ -257,11 +257,23 @@
     window.pywebview.api.set_opacity(parseInt(opacityInput.value, 10));
   });
 
+  // Cancellable so a brief dip out of the small popup's edge (reaching for
+  // a header button near the border, say) and back in within the 250ms
+  // grace period doesn't still close it -- without clearing the timer on
+  // mouseenter, only `pinned` was checked at fire time, not whether the
+  // cursor had actually come back.
+  let leaveTimer = null;
   document.addEventListener("mouseleave", () => {
     if (pinned) return;
-    setTimeout(() => {
+    leaveTimer = setTimeout(() => {
       if (!pinned) window.pywebview.api.close();
     }, 250);
+  });
+  document.addEventListener("mouseenter", () => {
+    if (leaveTimer) {
+      clearTimeout(leaveTimer);
+      leaveTimer = null;
+    }
   });
 
   window.addEventListener("pywebviewready", async () => {

@@ -21,7 +21,7 @@ import pystray
 
 from usage_widget import __version__, i18n, single_instance
 from usage_widget.auth import has_saved_session, login_and_save_session
-from usage_widget.config import Config
+from usage_widget.config import DEFAULT_REFRESH_SECONDS, Config
 from usage_widget.fetcher import SessionExpiredError, UsageData, fetch_account_email, fetch_usage
 from usage_widget.paths import session_state_path
 from usage_widget.self_update import apply_update, can_self_update, cleanup_stale_update_files
@@ -95,16 +95,28 @@ def _refresh_account_email() -> None:
 def _refresh_loop(icon: pystray.Icon) -> None:
     global _latest_usage, _last_error
     while True:
-        config = Config.load()
-        if not _logged_out:
-            try:
-                _latest_usage = _fetch_with_relogin()
-                _last_error = None
-                push_usage_update(_latest_usage)
-            except Exception as exc:
-                _last_error = str(exc)
-            _update_icon(icon)
-        time.sleep(config.refresh_seconds)
+        try:
+            config = Config.load()
+            if not _logged_out:
+                try:
+                    _latest_usage = _fetch_with_relogin()
+                    _last_error = None
+                    push_usage_update(_latest_usage)
+                except Exception as exc:
+                    _last_error = str(exc)
+                _update_icon(icon)
+            interval = config.refresh_seconds
+            if not isinstance(interval, (int, float)) or interval <= 0:
+                interval = DEFAULT_REFRESH_SECONDS
+            time.sleep(interval)
+        except Exception:
+            # config.json can hold a value this build doesn't expect (a
+            # hand-edited or corrupted refresh_seconds, say) -- letting
+            # anything in this loop (time.sleep() included) go uncaught
+            # would silently kill this daemon thread forever, freezing the
+            # tray icon on stale data with no visible sign anything is
+            # wrong, exactly what _update_icon's own docstring warns about.
+            time.sleep(DEFAULT_REFRESH_SECONDS)
 
 
 def _manual_refresh(icon: pystray.Icon) -> Optional[UsageData]:
@@ -147,6 +159,7 @@ def _do_switch_account(icon: pystray.Icon) -> None:
             _latest_usage = _fetch_with_relogin()
             _last_error = None
             _logged_out = False
+            push_usage_update(_latest_usage)
             _refresh_account_email()
         except Exception as exc:
             _last_error = str(exc)

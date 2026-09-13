@@ -60,6 +60,14 @@ def fetch_usage() -> UsageData:
             organizations = orgs_response.json()
             if not organizations:
                 raise SessionExpiredError("no organizations returned for this account")
+            # Known limitation: an account that belongs to more than one
+            # Claude organization (e.g. a personal workspace plus a team
+            # one) always gets whichever org happens to be first here,
+            # with no way to tell if that's the one the user actually
+            # wants tracked. Not fixed -- there's no real multi-org
+            # account to verify a "pick the right one" heuristic against,
+            # and guessing wrong silently would be worse than this
+            # documented assumption.
             org_id = organizations[0]["uuid"]
 
             usage_response = context.request.get(f"{API_BASE}/{org_id}/usage")
