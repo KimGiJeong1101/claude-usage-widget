@@ -1,7 +1,8 @@
-// Shared translation table for the popups (usage/settings/account) and the
-// startup splash screen. Python keeps its own copy of the tray/notification
-// strings (usage_widget/i18n.py) since this file can't be imported there --
-// keep keys in sync by hand when adding a new user-facing string.
+// 사용량/설정/계정 팝업들과 시작 스플래시 화면이 공유하는 번역 테이블.
+// 트레이 아이콘/알림 문구는 Python 쪽(usage_widget/i18n.py)에 별도로 똑같은
+// 내용을 한 벌 더 갖고 있다 -- 이 JS 파일을 Python에서 그대로 가져다 쓸(import)
+// 수는 없기 때문이다. 그래서 사용자에게 보이는 새 문구를 추가할 때마다
+// 두 곳의 키를 손으로 맞춰서 동기화해줘야 한다.
 const I18N_TRANSLATIONS = {
   ko: {
     "usage.title": "Claude 사용량",
@@ -118,13 +119,15 @@ function i18nText(lang, key) {
   return table[key] ?? I18N_TRANSLATIONS.ko[key] ?? key;
 }
 
-// Tray icon style names (도넛 게이지/배터리/...) come from Python
-// (usage_widget/i18n.py's tray_style_labels()) as the settings popup's
-// initial data, already localized to whatever language was active when it
-// was opened. That's fine after a save-and-reopen, but the language
-// dropdown's live preview (see settings.html) has no server round-trip to
-// re-fetch them with -- so it needs its own copy here, kept in sync by
-// hand with the Python side same as everything else in this file.
+// 트레이 아이콘 스타일 이름(도넛 게이지/배터리/...)은 설정 팝업이 열릴 때
+// Python 쪽(usage_widget/i18n.py의 tray_style_labels())에서 초기 데이터로
+// 내려주는데, 이때 이미 팝업을 연 시점에 켜져 있던 언어로 번역이 끝난
+// 상태로 온다. 저장하고 팝업을 다시 열면 이 방식으로도 문제없이 새 언어로
+// 보이지만, 언어 드롭다운을 바꿀 때 그 자리에서 바로 미리보기를 보여주는
+// 기능(settings.html 참고)은 서버(Python)를 다시 호출해서 새로 받아오는
+// 과정이 없다 -- 그래서 이 파일 안에 똑같은 내용을 한 벌 더 따로 갖고 있어야
+// 하고, 이 파일의 다른 부분들과 마찬가지로 Python 쪽과 손으로 맞춰서
+// 동기화해줘야 한다.
 const I18N_TRAY_STYLE_LABELS = {
   ko: { donut: "도넛 게이지", battery: "배터리", bar: "막대", big_number: "숫자", liquid: "원형 채움" },
   en: { donut: "Donut gauge", battery: "Battery", bar: "Bar", big_number: "Number", liquid: "Liquid fill" },
@@ -137,10 +140,11 @@ function trayStyleLabel(lang, key) {
   return table[key] ?? I18N_TRAY_STYLE_LABELS.ko[key] ?? key;
 }
 
-// Swaps every tagged element's text/title to `lang`. Called once initial
-// data (which carries the saved language) arrives from Python -- the
-// HTML's hardcoded Korean text is just the pre-JS fallback shown for the
-// instant before that round-trip resolves.
+// data-i18n(-title) 속성이 붙은 모든 요소의 텍스트/툴팁을 `lang` 언어로
+// 바꿔치기한다. 저장된 언어 정보를 담은 초기 데이터가 Python으로부터
+// 도착한 딱 그 시점에 한 번 호출된다 -- HTML에 하드코딩되어 있는 한국어
+// 텍스트는, 이 데이터를 받아오는 왕복 호출(round-trip)이 끝나기 전
+// 아주 짧은 순간 동안만 보여주는 "JS 실행 전 임시 대체 화면"일 뿐이다.
 function applyI18n(lang) {
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     el.textContent = i18nText(lang, el.getAttribute("data-i18n"));

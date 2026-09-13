@@ -1,12 +1,12 @@
-"""Central translation table for tray menu/notification text and the tray
-icon style labels.
+"""트레이 메뉴/알림에 쓰이는 문구, 그리고 트레이 아이콘 스타일 이름을
+언어별로 모아둔 번역 테이블.
 
-The popup HTML/JS layer (assets/web/*.html) can't import this module, so it
-keeps its own copy of the same keys in assets/web/i18n.js -- when adding a
-new user-facing string, check whether it belongs here (Python-rendered:
-tray, notifications, the usage popup's reset-time text) or there (anything
-rendered inside a popup's HTML).
-"""
+팝업 화면(HTML/JS로 만들어진 assets/web/*.html)은 파이썬 모듈인 이 파일을
+직접 불러다 쓸 수 없다. 그래서 어쩔 수 없이 assets/web/i18n.js에 똑같은
+내용의 번역 테이블을 하나 더 만들어서 따로 관리하고 있다 -- 새로운
+사용자용 문구를 추가할 때는, 그게 파이썬이 직접 그리는 부분(트레이 메뉴,
+알림, 사용량 팝업의 리셋 시각 문구 등)이면 여기에, 팝업 HTML 안에서
+그려지는 부분이면 그쪽(i18n.js)에 추가해야 한다."""
 
 from typing import Dict
 

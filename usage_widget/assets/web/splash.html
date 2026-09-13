@@ -67,9 +67,10 @@
   </div>
 
 <script>
-  // No js_api round-trip beyond which language to render in -- the splash
-  // has nothing else to show or call back into, and it's gone again within
-  // a few seconds either way.
+  // 어떤 언어로 보여줄지 알아내는 것 말고는 js_api를 통한 Python과의 왕복
+  // 호출이 전혀 없다 -- 이 스플래시 화면은 어차피 보여줄 것도, Python을
+  // 다시 호출해서 처리할 일도 딱히 없고, 어느 쪽이든 몇 초 안에 금방
+  // 사라져버리기 때문이다.
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_language();
     applyI18n(data.language || "ko");

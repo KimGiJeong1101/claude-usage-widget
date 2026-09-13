@@ -82,13 +82,15 @@
     window.pywebview.api.close();
   });
 
-  // Re-translates this screen's own labels immediately as the dropdown
-  // changes, same "preview before you commit" idea as the opacity slider --
-  // saving is still required to persist it and to update the tray menu/other
-  // popups. The tray-style dropdown's options aren't tagged with data-i18n
-  // (their text came from Python, localized to whatever language the popup
-  // was opened with) so they need to be re-labeled explicitly here too,
-  // or they'd be the one thing on this screen not previewing live.
+  // 언어 드롭다운 값이 바뀌는 즉시 이 화면에 있는 라벨들을 곧바로
+  // 다시 번역해서 보여준다. 투명도 슬라이더와 같은 "저장하기 전에 미리
+  // 보여준다"는 아이디어다 -- 실제로 저장하고 트레이 메뉴/다른 팝업들까지
+  // 반영되게 하려면 여전히 저장(save) 버튼을 눌러야 한다. 트레이 아이콘
+  // 스타일 드롭다운의 각 항목(option)들은 data-i18n 속성이 붙어있지
+  // 않은데, 이 텍스트들은 팝업을 열었을 당시의 언어로 이미 번역되어
+  // Python에서 내려온 것이기 때문이다. 그래서 이 항목들만은 여기서 따로
+  // 직접 다시 라벨을 붙여줘야 하고, 안 그러면 이 화면에서 유일하게 실시간
+  // 미리보기가 안 되는 요소가 되어버린다.
   languageSelect.addEventListener("change", () => {
     const lang = languageSelect.value;
     applyI18n(lang);

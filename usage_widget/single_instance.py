@@ -1,31 +1,36 @@
-"""Keeps a second launch of the app from starting a fully independent
-second instance -- without this, running the exe twice (double-clicking it
-again out of habit, autostart racing a manual launch, etc.) produced two
-unrelated background processes, each with its own tray icon (multiple
-icons cluttering the tray) and each doing its own PyInstaller onefile
-temp-directory extraction/cleanup (surfaced as "Failed to remove temporary
-directory" warnings when they stepped on each other, especially around a
-self-update relaunch).
+"""이 앱이 실수로 여러 개 동시에 실행되는 것을 막는 파일.
+
+이게 없으면, exe를 두 번 실행하면(습관적으로 다시 더블클릭하거나, 자동
+시작과 수동 실행이 우연히 겹치거나 등) 서로 아무 관련 없는 두 개의
+백그라운드 프로세스가 생겨버린다. 그러면 트레이 아이콘도 두 개가 뜨고,
+각자 PyInstaller onefile 방식이 쓰는 임시 폴더(exe를 실행할 때마다
+압축을 풀어두는 폴더)를 따로 만들고 지우다가 서로 부딪혀서 "임시 폴더를
+지울 수 없습니다" 같은 경고가 뜨기도 한다 (특히 자동 업데이트로 재시작할
+때 자주 보임).
 """
 
 import socket
 from typing import Optional
 
-# Arbitrary fixed port in the private/dynamic range, chosen only to be
-# unlikely to collide with anything else running locally -- its number
-# has no other significance.
+# 로컬(내 컴퓨터 안에서만 쓰는) 포트 번호 중 아무 의미 없이 하나 골라서
+# 고정해둔 것 -- 다른 프로그램이 우연히 이 포트를 쓸 가능성이 낮은,
+# 흔히 안 쓰는 대역에서 그냥 하나 정한 값이다.
 _LOCK_PORT = 48273
 
 _lock_socket: Optional[socket.socket] = None
 
 
 def acquire() -> bool:
-    """Binding a local TCP port works as a cross-platform mutex without
-    any OS-specific API (a Windows named mutex, a Unix PID file with its
-    own stale-lock handling, etc.) -- the OS releases the port
-    automatically when this process exits or crashes, so there's nothing
-    to clean up on the next run either way. Returns False if another
-    instance already holds it."""
+    """이미 실행 중인지 확인하는 방법으로, 내 컴퓨터 안에서만 쓰는
+    포트(TCP 소켓) 하나를 점유해보는 방식을 쓴다. 이 방법의 장점은
+    Windows/macOS/Linux 어디서든 똑같이 동작한다는 것이다(Windows 전용
+    "네임드 뮤텍스"나, 유닉스 계열에서 쓰는 "PID 파일을 만들고 나중에
+    지워야 하는" 방식과 달리, OS별로 다른 코드를 짤 필요가 없다). 그리고
+    프로세스가 정상 종료되든 강제로 죽든, OS가 알아서 그 포트를 다시
+    풀어주기 때문에, 다음 실행을 위해 따로 뒷정리를 해줄 필요도 없다.
+
+    이미 다른 인스턴스(같은 프로그램의 다른 실행 중인 복사본)가 이 포트를
+    붙잡고 있으면 False를 돌려준다."""
     global _lock_socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -33,8 +38,11 @@ def acquire() -> bool:
     except OSError:
         sock.close()
         return False
-    # Keeping the bound socket alive (never closed) for the process's
-    # whole lifetime *is* the lock -- assigning it to a module global
-    # here is what stops garbage collection from closing it early.
+    # 이 소켓을 절대 닫지 않고 프로세스가 살아있는 내내 붙잡고 있는 것
+    # 자체가 바로 "잠금(lock)"의 정체다. 함수가 끝나도 이 변수(전역 변수,
+    # 모듈 전체에서 공유되는 변수)에 담아두는 이유는, 그렇게 안 하면
+    # 파이썬이 "아무도 안 쓰는 값"이라고 판단해서 가비지 컬렉션(안 쓰는
+    # 메모리를 자동으로 정리하는 기능) 때 이 소켓을 일찍 닫아버릴 수
+    # 있기 때문이다.
     _lock_socket = sock
     return True

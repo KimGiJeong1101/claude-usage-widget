@@ -1,17 +1,19 @@
-"""Draws the small status icon shown in the Windows tray / macOS menu bar.
+"""Windows 트레이 / macOS 메뉴바에 보이는 작은 상태 아이콘을 그리는 파일.
 
-Tray icons are rendered at very small real sizes (commonly 16-22px), where
-thin rings and small text become an illegible blur -- confirmed by testing.
-Several styles are offered (selectable in Settings) since people disagree on
-which tradeoff they want between "exact number" and "reads at a glance."
-All of them only show the session (5-hour) percentage, since it resets far
-more often than the weekly figure and is the one worth a glance without
-opening the popup -- the weekly number is one click away in the popup.
+트레이 아이콘은 실제로는 아주 작은 크기(보통 16~22px)로 화면에 표시된다.
+그런데 그 크기에서는 얇은 원형 링이나 작은 글씨가 뭉개져서 잘 안 보인다는
+걸 실제로 테스트해보고 확인했다. 그래서 스타일을 여러 개 만들어서(설정
+화면에서 고를 수 있음) 선택하게 했다 -- "정확한 숫자를 보여줄지" 아니면
+"한눈에 대충 얼마나 찼는지 느낌만 보여줄지" 사이에서 사람마다 선호가
+다르기 때문이다. 어떤 스타일이든 세션(5시간) 사용량 퍼센트만 보여준다 --
+세션 쪽이 주간 사용량보다 훨씬 자주 리셋되니까, 팝업을 열어보지 않고
+얼핏 봐도 될 만큼 자주 확인할 가치가 있는 숫자이기 때문이다. 주간
+사용량은 클릭 한 번이면 팝업에서 바로 볼 수 있다.
 
-Every style outlines its shape (see OUTLINE/OUTLINE_WIDTH) so it stays
-legible against a taskbar/menu-bar background of any color -- a plain fill
-color can otherwise vanish against a similarly-colored background.
-"""
+모든 스타일에 테두리(윤곽선, 아래 OUTLINE/OUTLINE_WIDTH 참고)를 둘렀는데,
+이건 작업표시줄/메뉴바의 배경색이 어떤 색이든 아이콘 모양이 잘 보이게
+하기 위해서다 -- 테두리 없이 색만 채워 넣으면, 배경색이랑 비슷한 색일 때
+아이콘이 배경에 묻혀서 안 보이는 경우가 생긴다."""
 
 from pathlib import Path
 
@@ -24,9 +26,10 @@ YELLOW = (251, 188, 5)
 RED = (234, 67, 53)
 TRACK = (222, 222, 222)
 OUTLINE = (90, 90, 90)
-# Outline widths here are drawn at the 64px source size; real tray icons
-# render at ~16-22px, so anything much thinner than this all but disappears
-# after the downscale (e.g. a 2px source outline becomes ~0.5px -- invisible).
+# 여기 적힌 테두리 두께는 원본 크기(64px)를 기준으로 그린 값이다. 실제
+# 트레이 아이콘은 16~22px 정도로 축소돼서 보이기 때문에, 이보다 훨씬 얇게
+# 그리면 축소되면서 거의 안 보이게 된다 (예: 원본에서 2px 두께였던 선은
+# 축소 후 약 0.5px이 되는데, 이건 사실상 안 보이는 것과 같다).
 OUTLINE_WIDTH = 7
 
 _FONT_PATH = Path(__file__).parent / "assets" / "fonts" / "Pretendard-Bold.otf"
@@ -41,9 +44,9 @@ def color_for_percent(percent: int) -> tuple:
 
 
 def _build_donut(session_percent: int, week_percent: int) -> Image.Image:
-    """Thick donut gauge, filled clockwise from the top -- a bold filled
-    wedge (not a thin outline) still reads as "roughly how full" at real
-    tray size."""
+    """두꺼운 도넛 모양 게이지. 위쪽부터 시계 방향으로 채워진다 -- 얇은
+    윤곽선이 아니라 두껍게 색을 채운 부채꼴 모양이라서, 실제 트레이
+    크기로 작아져도 "대충 얼마나 찼는지" 정도는 눈에 잘 들어온다."""
     margin, thickness = 3, 28
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -67,7 +70,7 @@ def _build_donut(session_percent: int, week_percent: int) -> Image.Image:
 
 
 def _build_bar(session_percent: int, week_percent: int) -> Image.Image:
-    """A single vertical bar, filled bottom-up."""
+    """세로로 긴 막대 하나. 아래쪽부터 위로 채워진다."""
     bar_width, margin, radius = 30, 4, 6
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -89,8 +92,9 @@ def _build_bar(session_percent: int, week_percent: int) -> Image.Image:
 
 
 def _build_battery(session_percent: int, week_percent: int) -> Image.Image:
-    """A battery-style gauge (rounded body + a small nub), filled left to
-    right -- a familiar "how much is left" metaphor."""
+    """배터리 모양(둥근 몸통 + 작은 돌기)으로 생긴 게이지. 왼쪽부터
+    오른쪽으로 채워진다 -- 실제 배터리 잔량 표시처럼 "얼마나 남았는지"를
+    누구나 바로 알 수 있는 익숙한 모양을 그대로 가져왔다."""
     body_w, body_h = 46, 30
     x0, y0 = (SIZE - body_w) // 2, (SIZE - body_h) // 2
     x1, y1 = x0 + body_w, y0 + body_h
@@ -117,7 +121,7 @@ def _build_battery(session_percent: int, week_percent: int) -> Image.Image:
 
 
 def _build_liquid(session_percent: int, week_percent: int) -> Image.Image:
-    """A circle that fills like a liquid gauge, rising from the bottom."""
+    """물이 차오르는 것처럼, 원 안이 아래에서부터 위로 채워지는 모양."""
     margin = 3
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -138,9 +142,9 @@ def _build_liquid(session_percent: int, week_percent: int) -> Image.Image:
 
 
 def _build_big_number(session_percent: int, week_percent: int) -> Image.Image:
-    """A solid severity-colored square with the percent number filling most
-    of it -- legible at real tray size specifically because the number is
-    large relative to the icon, unlike a small number next to a ring."""
+    """상태에 따라 색이 바뀌는 네모 배경 안에, 퍼센트 숫자를 꽉 차게 크게
+    그린다 -- 링 옆에 작게 붙은 숫자와 달리, 숫자 자체가 아이콘 크기 대비
+    크게 차지하고 있어서 실제 트레이 크기로 작아져도 숫자가 잘 읽힌다."""
     margin = 4
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -179,10 +183,11 @@ LOGGED_OUT_COLOR = (150, 150, 150)
 
 
 def _build_logged_out(style: str) -> Image.Image:
-    """The chosen style's shape, but with every severity color (green/
-    yellow/red) replaced by a neutral gray -- a colored reading would look
-    like a real usage percentage, which would be misleading while logged
-    out and not actually being tracked."""
+    """선택된 스타일의 모양은 그대로 두고, 상태를 나타내는 색(초록/노랑/빨강)만
+    전부 무채색 회색으로 바꿔서 그린다 -- 로그아웃 상태에서도 색이 그대로
+    남아있으면 마치 실제 사용량 수치인 것처럼 보여서 헷갈릴 수 있는데,
+    사실 로그아웃 중엔 사용량 추적 자체를 안 하고 있으니 이건 오해를
+    부르는 표시가 된다."""
     builder = STYLES.get(style, STYLES[DEFAULT_STYLE])
     img = builder(50, 50).convert("RGBA")
     pixels = img.load()

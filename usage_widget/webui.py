@@ -1,17 +1,20 @@
-"""Popup windows (usage / settings / account), rendered with pywebview
-instead of tkinter -- the HTML/CSS/JS layer lives in
-usage_widget/assets/web/*.html, this module is just the Python side of the
-bridge (window creation, positioning, and the js_api objects each page
-calls into).
+"""팝업 창들(사용량/설정/계정)을 담당하는 파일. tkinter가 아니라
+pywebview로 만든다 -- 실제 화면(HTML/CSS/JS)은
+usage_widget/assets/web/*.html에 있고, 이 파일은 그 화면과 파이썬 코드를
+이어주는 다리 역할만 한다(창을 만들고, 위치를 잡고, 각 화면이 호출하는
+js_api 객체를 준비하는 것).
 
-Threading: pywebview requires at least one window to exist before
-webview.start() is called, and that call blocks the thread it's called
-from -- the same shape tkinter's hidden-root + mainloop() had. Unlike
-tkinter, pywebview's create_window()/destroy() are documented as safe to
-call from any thread (verified: a background thread creating a window
-while webview.start() blocks the main thread does not crash), so pystray's
-menu callbacks can open popups directly without marshaling through
-root.after(...).
+## 스레드에 대해
+
+pywebview는 webview.start()를 부르기 전에 창이 최소 하나는 이미 만들어져
+있어야 하고, 그 호출은 자신을 부른 스레드를 그 자리에서 멈추게 만든다 --
+tkinter의 "숨겨진 root 창 하나 만들어두고 mainloop() 돌리기"와 같은
+구조다. tkinter와 다른 점: pywebview의 create_window()/destroy()는
+"어느 스레드에서 불러도 안전하다"고 공식적으로 문서화돼 있다(실제로도
+확인함: webview.start()가 메인 스레드를 멈추고 있는 동안, 다른
+백그라운드 스레드에서 새 창을 만들어도 프로그램이 안 죽는다). 그래서
+pystray의 메뉴 콜백에서 root.after(...) 같은 걸 거치지 않고 팝업을
+바로 열 수 있다.
 """
 
 import ctypes
@@ -37,11 +40,11 @@ _root_window: Optional[webview.Window] = None
 
 
 def init_gui() -> None:
-    """Creates the hidden window pywebview needs to exist before start()
-    will run. Kept alive for the app's whole lifetime; destroying it (see
-    shutdown_gui) is what makes the underlying native loop actually exit,
-    since the windows toolkit backing pywebview quits once its last window
-    closes."""
+    """pywebview가 start()를 실행하기 전에 필요로 하는, 화면에 안 보이는
+    숨겨진 창을 하나 만들어둔다. 이 창은 앱이 살아있는 내내 계속 존재한다.
+    이 창을 없애는 것(아래 shutdown_gui 참고)이 곧 앱을 진짜로 종료시키는
+    방법이다 -- pywebview를 뒤에서 돌리고 있는 창 관련 라이브러리는 "마지막
+    창이 닫히면" 자기도 같이 종료되기 때문이다."""
     global _root_window
     if _root_window is None:
         _root_window = webview.create_window("root", html="<html></html>", hidden=True)
@@ -52,12 +55,12 @@ def run_gui_loop() -> None:
 
 
 def shutdown_gui() -> None:
-    """Destroying the hidden root window is what makes pywebview's native
-    loop exit, but it doesn't touch any usage/settings/account popup that
-    happens to still be open -- those are separate windows, and being left
-    behind (visible, orphaned) after "종료" was the actual bug reported.
-    Closing them all first, before the root, is what actually clears them
-    off the screen."""
+    """숨겨진 root 창을 없애야 pywebview의 내부 반복문(native loop)이
+    끝난다. 그런데 이것만으로는, 그 시점에 마침 열려 있던 사용량/설정/계정
+    팝업들은 전혀 안 건드려진다 -- 그 팝업들은 완전히 별개의 창이라서,
+    "종료"를 눌러도 화면에 그대로 남아있는(주인 없이 붕 떠버린) 버그가
+    실제로 보고된 적이 있다. 그래서 root 창을 없애기 전에, 열려 있는
+    팝업들을 먼저 전부 닫아야 화면에서 진짜로 다 사라진다."""
     with _singleton_dict_lock:
         windows = list(_singleton_windows.values())
     for window in windows:
@@ -86,15 +89,17 @@ def _cursor_pos() -> Optional[tuple]:
 
 
 def _position_near_cursor(width: int, height: int) -> tuple:
-    """Anchors a popup near the click position, opening away from whichever
-    screen edge the cursor is closest to -- same reasoning as the old
-    tkinter flyout: it has to land under the cursor immediately since it
-    closes as soon as the pointer leaves it. Falls back to pywebview's own
-    default placement (None, None) on platforms this hasn't been
-    implemented for yet (non-Windows). Superseded by _position_near_tray
-    as the usage popup's actual positioning (see its docstring for why);
-    kept as that function's own fallback if the taskbar's work area can't
-    be read for some reason."""
+    """팝업을 클릭한 위치 근처에 띄우되, 화면 가장자리 중 커서와 가까운
+    쪽 반대 방향으로 열리게 한다 -- 예전 tkinter 버전의 플라이아웃과
+    이유가 같다: 이 팝업은 마우스가 벗어나면 바로 닫히기 때문에, 뜨자마자
+    커서 바로 아래에 있어야만 한다. 아직 이 위치 계산을 구현 안 한
+    플랫폼(Windows가 아닌 경우)에서는 pywebview 자체의 기본 배치
+    (None, None)로 대체된다.
+
+    지금은 사용량 팝업의 실제 위치 계산으로는 _position_near_tray가 이
+    함수를 대체했다(왜 바꿨는지는 그쪽 설명 참고) -- 이 함수는 작업표시줄의
+    "작업 영역" 정보를 무슨 이유로든 못 읽어왔을 때 _position_near_tray가
+    대신 쓰는 안전장치(폴백)로만 남아있다."""
     cursor = _cursor_pos()
     screen = _screen_size()
     if cursor is None or screen is None:
@@ -114,12 +119,14 @@ _SPI_GETWORKAREA = 0x0030
 
 
 def _work_area() -> Optional[tuple]:
-    """The desktop rectangle Windows keeps clear of the taskbar -- the same
-    value Windows itself uses so a maximized window doesn't slide under
-    it. Reading this (rather than assuming the taskbar is at the bottom of
-    a screen the size of GetSystemMetrics) is what makes _position_near_tray
-    work regardless of which edge the taskbar is docked to, whether it
-    auto-hides, or which monitor is primary."""
+    """Windows가 "작업표시줄을 뺀 나머지 사용 가능한 화면 영역"으로 정해둔
+    사각형 범위를 돌려준다 -- 창을 최대화했을 때 작업표시줄 밑으로 안
+    들어가게 하려고 Windows 자신도 쓰는 바로 그 값이다. "작업표시줄은 항상
+    화면 맨 아래에 있고, 화면 전체 크기(GetSystemMetrics)에서 그만큼
+    빼면 된다"고 무작정 가정하는 대신 이 값을 직접 읽어오기 때문에,
+    작업표시줄이 어느 쪽(위/아래/왼쪽/오른쪽)에 도킹돼 있든, 자동 숨김
+    상태든, 어느 모니터가 주 모니터든 상관없이 _position_near_tray가 잘
+    동작한다."""
     if not _IS_WINDOWS:
         return None
 
@@ -138,18 +145,20 @@ def _work_area() -> Optional[tuple]:
 
 
 def _macos_menubar_position(width: int, height: int) -> Optional[tuple]:
-    """Best-effort macOS analog of _position_near_tray: anchors near the
-    top-right of the screen, where menu bar status items (this app's tray
-    icon included) live, mirroring how a native menu bar dropdown (Wi-Fi,
-    Control Center, battery) always opens directly under the menu bar
-    rather than following the cursor.
+    """macOS용으로 _position_near_tray와 같은 역할을 하려는 최선의
+    시도(best-effort)다: 화면 오른쪽 위(메뉴바 상태 아이콘들, 이 앱의
+    트레이 아이콘도 포함돼서 모여있는 곳) 근처에 앵커(고정)한다. 이건
+    macOS의 네이티브 메뉴바 드롭다운(와이파이, 제어 센터, 배터리 등)이
+    커서를 따라가지 않고 항상 메뉴바 바로 아래에서 열리는 것과 같은
+    원리다.
 
-    UNVERIFIED -- there has been no real Mac available to test this
-    against. AppKit's coordinate origin is the bottom-left of the screen
-    (unlike Windows' top-left), which the flip below tries to account for
-    to match the top-left-origin (x, y) pywebview's create_window() expects
-    on every platform; that flip is the part most likely to need a
-    real-machine fix."""
+    **미검증** -- 이걸 테스트해볼 실제 Mac이 아직 없었다. AppKit(macOS의
+    화면 그리기 라이브러리)의 좌표계는 Windows와 달리 화면 왼쪽 "아래"가
+    원점(0,0)이다(Windows는 왼쪽 "위"가 원점). 아래 코드에서 이 차이를
+    뒤집어서, pywebview의 create_window()가 모든 플랫폼에서 공통으로
+    기대하는 "왼쪽 위가 원점인" (x, y) 좌표로 맞춰주려고 하는데, 바로 이
+    좌표 뒤집기 계산 부분이 실제 Mac에서 검증했을 때 고쳐야 할 가능성이
+    가장 높은 부분이다."""
     if _IS_WINDOWS:
         return None
     try:
@@ -160,7 +169,7 @@ def _macos_menubar_position(width: int, height: int) -> Optional[tuple]:
     if screen is None:
         return None
     full = screen.frame()
-    visible = screen.visibleFrame()  # excludes the menu bar (and Dock, if docked)
+    visible = screen.visibleFrame()  # 메뉴바(그리고 독Dock이 화면에 붙어 있다면 그것도) 뺀 나머지 영역
     screen_w, screen_h = full.size.width, full.size.height
     gap = 8
 
@@ -173,29 +182,29 @@ def _macos_menubar_position(width: int, height: int) -> Optional[tuple]:
 
 
 def _position_near_tray(width: int, height: int) -> tuple:
-    """Anchors a popup right next to the system tray/menu bar, the way a
-    native OS flyout (Windows' volume/network/battery, macOS's Wi-Fi/
-    Control Center) does -- next to wherever that actually is, rather than
-    "wherever the cursor happened to be" when the click landed. A friend's
-    feedback on the original cursor-following behavior was that it didn't
-    read as a normal Windows flyout; anchoring to the taskbar's real work
-    area (instead of a screen-size heuristic) also incidentally fixes
-    cases the old approach got wrong -- a taskbar docked somewhere other
-    than the bottom, or a click that lands via the right-click menu's
-    "열기" item rather than directly on the tray icon, where the cursor
-    isn't necessarily anywhere near the tray at all.
+    """팝업을 시스템 트레이/메뉴바 바로 옆에 앵커한다 -- Windows의 네이티브
+    플라이아웃(볼륨/네트워크/배터리)이나 macOS의 와이파이/제어 센터가
+    그러듯이, "클릭했을 때 커서가 우연히 어디 있었는지"가 아니라 트레이가
+    실제로 있는 위치 옆에 붙인다. 지인 피드백: 원래 커서를 따라다니던
+    방식은 일반적인 Windows 플라이아웃처럼 안 느껴진다고 함. 화면 크기만
+    보고 추측하는 대신 작업표시줄의 실제 작업 영역에 앵커하면, 부수적으로
+    예전 방식이 틀리던 경우들도 같이 고쳐진다 -- 작업표시줄이 아래쪽이
+    아닌 다른 곳에 도킹돼 있는 경우라거나, 트레이 아이콘을 직접 클릭한 게
+    아니라 우클릭 메뉴의 "열기" 항목으로 열어서 커서가 트레이 근처에
+    전혀 없는 경우 등.
 
-    Returns (x, y, grow_upward) -- grow_upward tells the caller which way
-    is safe to expand the window later (see _box_vertical_resizer): True
-    whenever the bottom edge was anchored snugly against something (the
-    taskbar in 3 of the 4 dock orientations below), where growing downward
-    the way a resize normally does would immediately invade it."""
+    (x, y, grow_upward)를 돌려준다 -- grow_upward는 나중에 이 창의 크기를
+    키울 때 어느 방향으로 키우는 게 안전한지 알려주는 값이다(자세한
+    사용처는 _box_vertical_resizer 참고). 아래 4가지 도킹 방향 중 3가지처럼
+    창의 아래쪽 경계가 뭔가(대개는 작업표시줄)에 딱 붙어서 앵커됐다면
+    True가 된다 -- 이럴 때 리사이즈가 원래 하던 대로 아래쪽으로 창을
+    키우면 곧바로 그 작업표시줄을 침범하게 된다."""
     work = _work_area()
     screen = _screen_size()
     if work is None or screen is None:
         macos_pos = _macos_menubar_position(width, height)
         if macos_pos is not None:
-            return (*macos_pos, False)  # anchored under the menu bar at the top -- growing down is fine
+            return (*macos_pos, False)  # 위쪽 메뉴바 밑에 앵커된 경우 -- 아래로 자라도 안전함
         return (*_position_near_cursor(width, height), False)
 
     left, top, right, bottom = work
@@ -203,16 +212,16 @@ def _position_near_tray(width: int, height: int) -> tuple:
     gap = 12
     grow_upward = True
 
-    if bottom < screen_h:  # taskbar docked at the bottom (by far the most common)
+    if bottom < screen_h:  # 작업표시줄이 아래쪽에 도킹 (압도적으로 가장 흔한 경우)
         x, y = right - width - gap, bottom - height - gap
-    elif top > 0:  # taskbar docked at the top
+    elif top > 0:  # 작업표시줄이 위쪽에 도킹
         x, y = right - width - gap, top + gap
-        grow_upward = False  # anchored at the top -- growing down moves away from the taskbar
-    elif right < screen_w:  # taskbar docked on the right
+        grow_upward = False  # 위쪽에 앵커됐으니 -- 아래로 자라는 게 오히려 작업표시줄에서 멀어지는 방향
+    elif right < screen_w:  # 작업표시줄이 오른쪽에 도킹
         x, y = right - width - gap, bottom - height - gap
-    elif left > 0:  # taskbar docked on the left
+    elif left > 0:  # 작업표시줄이 왼쪽에 도킹
         x, y = left + gap, bottom - height - gap
-    else:  # no taskbar edge detected -- fall back to the bottom-right corner
+    else:  # 작업표시줄 위치를 못 찾음 -- 화면 오른쪽 아래 구석으로 대신 배치
         x, y = screen_w - width - gap, screen_h - height - gap
 
     x = max(0, min(x, screen_w - width))
@@ -232,9 +241,10 @@ _destroy_lock = threading.Lock()
 
 
 def _safe_destroy(window: webview.Window) -> None:
-    """Destroys a window at most once -- close_fn can end up called twice in
-    quick succession in some flows (e.g. a fast double-click), and this
-    makes the second call a no-op rather than a race."""
+    """창을 최대 한 번만 없앤다 -- 어떤 흐름에서는(예: 아주 빠르게 두 번
+    클릭하는 경우) close_fn이 연달아 두 번 불릴 수도 있는데, 이렇게 하면
+    두 번째 호출은 그냥 아무 일도 안 하고 넘어가서, 두 스레드가 동시에
+    같은 창을 없애려다 충돌하는 걸 막아준다."""
     with _destroy_lock:
         if getattr(window, "_uw_destroyed", False):
             return
@@ -245,32 +255,34 @@ def _safe_destroy(window: webview.Window) -> None:
         pass
 
 
-_PANEL_RADIUS = 20  # must match --radius in common.css
+_PANEL_RADIUS = 20  # common.css의 --radius 값과 반드시 일치해야 함
 
 
 def _round_corners(window: webview.Window, radius: int = _PANEL_RADIUS) -> None:
-    """Clips the native window to a rounded-rect region via the Win32 API.
+    """Win32 API를 이용해서, 네이티브 창 자체를 둥근 사각형 모양으로
+    잘라낸다(클리핑).
 
-    pywebview's transparent=True on Windows only makes the *page's own*
-    background see-through (so CSS can show the Form's BackColor through
-    it) -- it does not give the native window itself real per-pixel OS
-    transparency. The corners outside our CSS border-radius were still
-    part of the opaque rectangular window, which showed up as a visible
-    square-cornered glitch behind the rounded panel. Clipping the actual
-    window region removes those corners at the OS level instead of trying
-    to make them transparent, which also means transparent=True can be
-    dropped -- and pywebview only applies its native drop shadow when
-    transparent is False, so this gets a real shadow as a side effect.
+    pywebview에서 Windows용 transparent=True 옵션은 사실 "페이지 자체의
+    배경"만 투명하게 만들어줄 뿐이다(그래서 CSS가 Form의 배경색을 그
+    너머로 비치게 할 수 있는 것뿐). 창 그 자체를 OS 차원에서 픽셀 단위로
+    진짜 투명하게 만들어주는 건 아니다. 그래서 우리가 CSS로 둥글게 만든
+    모서리 바깥쪽 부분은 여전히 불투명한 사각형 창의 일부로 남아있었고,
+    그게 둥근 패널 뒤에서 각진 자국처럼 눈에 보이는 문제가 있었다. 창의
+    실제 영역 자체를 잘라내면 그 모서리를 OS 차원에서 아예 없애버릴 수
+    있어서, 이런 식으로 투명하게 "보이도록" 애쓸 필요가 없다. 덤으로
+    transparent=True를 안 써도 돼서, pywebview가 원래 transparent가
+    False일 때만 적용해주는 자연스러운 그림자 효과도 얻게 됐다.
 
-    The region has to be sized/read in *physical* pixels, not the logical
-    width/height passed to create_window: pywebview scales a window's
-    actual native Size by the monitor's DPI factor internally (a 360x400
-    window is a real ~450x500 win32 window at 125% scaling), and using the
-    unscaled logical size here left the clip region smaller than the real
-    window -- an unclipped, still-square sliver on any display over 100%
-    scaling. Reading window.native.Size (and scaling the radius the same
-    way) at apply-time avoids having to duplicate pywebview's own scale
-    calculation."""
+    이 잘라낼 영역의 크기는 create_window에 넘긴 논리적인(logical)
+    가로/세로 값이 아니라, 실제 물리적(physical) 픽셀 단위로 읽고
+    계산해야 한다: pywebview는 내부적으로 모니터의 DPI(화면 배율) 값에
+    따라 창의 진짜 네이티브 크기를 다시 스케일링한다(예: 125% 배율에서는
+    360x400짜리 창이 실제로는 약 450x500 크기의 win32 창이 된다). 만약
+    스케일 안 된 논리적 크기 그대로 계산하면, 잘라내는 영역이 실제 창보다
+    작아져서, 100% 초과 배율의 화면에서는 여전히 각진 모서리가 살짝
+    남아있게 된다. 창이 실제로 화면에 뜬 시점에 window.native.Size(그리고
+    반지름도 같은 비율로)를 읽어오면, pywebview가 내부적으로 하는 배율
+    계산을 우리가 또 따로 중복해서 할 필요가 없다."""
     if not _IS_WINDOWS:
         return
 
@@ -286,10 +298,11 @@ def _round_corners(window: webview.Window, radius: int = _PANEL_RADIUS) -> None:
             pass
 
     window.events.shown += apply
-    # The resize grip (see resize_by()/common.js) changes window.native.Size
-    # at runtime, same as an OS-driven resize would -- reapply the clip so
-    # the rounded corners keep matching the new size instead of clipping to
-    # the size the window was first shown at.
+    # 리사이즈 그립(모서리 손잡이, resize_by()/common.js 참고)으로 크기를
+    # 바꾸면 window.native.Size가 실시간으로 바뀌는데, 이건 OS가 직접
+    # 창 크기를 바꿔줄 때와 똑같은 효과다 -- 그래서 클리핑(잘라내기)도
+    # 다시 적용해줘야, 처음 창이 떴을 때 크기 기준으로 잘려있던 둥근
+    # 모서리가 새로 바뀐 크기에도 계속 맞게 유지된다.
     window.events.resized += apply
 
 
@@ -299,15 +312,16 @@ _LWA_ALPHA = 0x2
 
 
 def _apply_window_opacity(window: webview.Window, percent: int) -> None:
-    """Makes the *entire* native window translucent via the Win32
-    WS_EX_LAYERED + SetLayeredWindowAttributes APIs, rather than a CSS
-    opacity trick on parts of the page. An earlier attempt faded only the
-    usage cards' colored background/border through a CSS ::before overlay,
-    specifically to keep text crisp -- but that's not what was asked for:
-    the whole window (text included) should fade as one sheet of glass,
-    the same way a semi-transparent KakaoTalk window looks. Layering the
-    real window blends every pixel it draws against whatever is behind it,
-    which is the only way to get that."""
+    """페이지 일부분만 CSS opacity로 흐리게 만드는 게 아니라, Win32의
+    WS_EX_LAYERED + SetLayeredWindowAttributes API를 이용해서 네이티브
+    창 "전체"를 반투명하게 만든다. 이전에 한 번 시도했던 방식은 CSS
+    ::before 오버레이로 사용량 카드의 색깔 있는 배경/테두리만 흐리게
+    했었는데(글자는 또렷하게 남기려고 일부러 그렇게 함) -- 그건 원하는
+    결과가 아니었다: 카톡(KakaoTalk)의 반투명 채팅창처럼, 글자까지
+    포함해서 창 전체가 하나의 유리판처럼 흐려져야 한다는 요청이었다.
+    진짜 창 자체를 "레이어(층)"로 다루면, 그 창이 그리는 모든 픽셀이
+    뒤에 있는 화면과 섞여서 표현되는데, 이게 그 효과를 낼 수 있는 유일한
+    방법이다."""
     if not _IS_WINDOWS:
         return
     try:
@@ -323,11 +337,12 @@ def _apply_window_opacity(window: webview.Window, percent: int) -> None:
 
 
 def _apply_initial_opacity(window: webview.Window, percent: int) -> None:
-    """Same DPI/timing reasoning as _round_corners: window.native isn't
-    reliably usable until the window has actually been shown, so the
-    first application of a saved (non-100%) opacity waits for that event
-    too. Later live changes from the slider happen well after the window
-    is already showing, so they call _apply_window_opacity directly."""
+    """_round_corners와 똑같은 DPI/타이밍 이유 때문에: window.native는
+    창이 실제로 화면에 뜨기 전까지는 안정적으로 쓸 수가 없다. 그래서
+    저장해둔 투명도 값(100%가 아닌 경우)을 처음 적용할 때도 창이 뜨는
+    이벤트를 기다렸다가 한다. 나중에 슬라이더를 움직여서 실시간으로
+    값이 바뀔 때는 이미 창이 뜬 지 한참 지난 뒤라서, 그때는 그냥
+    _apply_window_opacity를 바로 부르면 된다."""
     if not _IS_WINDOWS or percent >= 100:
         return
 
@@ -337,27 +352,28 @@ def _apply_initial_opacity(window: webview.Window, percent: int) -> None:
     window.events.shown += apply
 
 
-# pywebview's WinForms backend sets Form.Size *before* switching
-# FormBorderStyle to frameless (see winforms.py: Size is assigned near the
-# top of the window-init method, FormBorderStyle = None happens later).
-# WinForms preserves ClientSize across a border-style change, so the
-# window ends up permanently smaller than requested once the (now absent)
-# border/caption chrome is subtracted -- confirmed by testing at multiple
-# requested sizes: reliably a fixed 16px narrower and 39px shorter (this
-# matches typical Windows non-client metrics: ~8px left+right resize
-# border, ~31px caption + top border). Only verified at 100% DPI scaling;
-# since border metrics do generally scale with DPI, this fixed pixel
-# fudge may be slightly off at other scale factors, but should still land
-# much closer than not compensating at all. Padding the requested size by
-# this amount up front makes the *actual* resulting window match the size
-# the CSS layout was designed for, instead of quietly clipping content in
-# a smaller-than-expected window.
+# pywebview의 WinForms(.NET의 창 그리기 방식) 백엔드는 프레임이 없는
+# 창으로 바꾸기 "전에" 먼저 Form.Size(창 크기)를 설정한다(winforms.py 안을
+# 보면, 창 생성 코드 위쪽에서 Size를 정하고, FormBorderStyle을 None으로
+# 바꾸는 건 그 뒤에 일어난다). 그런데 WinForms는 테두리 스타일이 바뀌어도
+# ClientSize(테두리를 뺀 실제 내용 영역 크기)는 그대로 유지하려고 한다.
+# 그 결과, 나중에 테두리/제목표시줄이 없어지고 나면, 그만큼(원래 있었을
+# 테두리 두께만큼)이 그냥 통째로 사라져서 창이 우리가 요청한 크기보다
+# 항상 작게 뜬다 -- 여러 크기로 직접 테스트해서 확인함: 항상 정확히
+# 가로 16px, 세로 39px씩 작아진다(이 숫자는 Windows의 일반적인
+# 비클라이언트 영역 크기와 얼추 맞다: 좌우 리사이즈 테두리 약 8px씩,
+# 제목표시줄+위쪽 테두리 약 31px). 이건 화면 배율(DPI) 100%에서만
+# 확인했다 -- 테두리 크기도 보통 DPI에 따라 같이 커지므로, 다른 배율
+# 에서는 이 고정 보정값이 살짝 안 맞을 수도 있지만, 아예 보정을 안 하는
+# 것보다는 훨씬 정확할 것이다. 창을 만들 때 요청하는 크기에 미리 이만큼
+# 더해두면, 실제로 생기는 창 크기가 CSS로 설계해둔 크기와 맞아떨어져서,
+# 예상보다 작은 창 안에 내용물이 조용히 잘려나가는 일이 없어진다.
 _WINFORMS_SIZE_FUDGE = (16, 39)
 
 
 def _new_window(title: str, page: str, js_api, width: int, height: int, position: tuple) -> webview.Window:
-    """Popups are independent -- usage/settings/account can all be open at
-    the same time, each closed on its own."""
+    """팝업들은 서로 완전히 독립적이다 -- 사용량/설정/계정 팝업을 전부
+    동시에 띄워둘 수 있고, 각자 따로 닫을 수 있다."""
     x, y = position
     create_width, create_height = width, height
     if _IS_WINDOWS:
@@ -373,21 +389,22 @@ def _new_window(title: str, page: str, js_api, width: int, height: int, position
         y=y,
         frameless=True,
         easy_drag=True,
-        # shadow=True (when transparent=False) makes pywebview call
-        # DwmExtendFrameIntoClientArea + DwmSetWindowAttribute to get a
-        # native drop shadow -- but that second call forces DWM to draw
-        # its own default non-client window frame back on, which fights
-        # with our SetWindowRgn corner clip and showed up as a stray
-        # dashed border, worst around the top edge, especially once the
-        # window gets focus. Not worth it -- staying without a native
-        # shadow keeps the rounded clip clean.
+        # shadow=True로 하면(transparent=False일 때) pywebview가
+        # DwmExtendFrameIntoClientArea + DwmSetWindowAttribute를 호출해서
+        # 네이티브 그림자를 만들어주는데, 이 두 번째 호출이 DWM(Windows의
+        # 창 그리기 관리자)한테 "기본 비클라이언트 창 프레임을 다시
+        # 그려라"라고 강제로 시키는 효과가 있다. 이게 우리가 SetWindowRgn
+        # 으로 잘라낸 둥근 모서리와 충돌해서, 특히 창이 포커스를 받을 때
+        # 위쪽 가장자리에 점선 테두리가 스치듯 나타나는 문제가 있었다.
+        # 그럴 가치가 없어서 -- 네이티브 그림자 없이 두는 게 둥근 모서리를
+        # 깔끔하게 유지해준다.
         shadow=False,
         on_top=True,
         resizable=False,
-        # Windows gets real rounded corners via _round_corners() below
-        # instead (see its docstring for why transparent=True isn't
-        # reliable there). Other platforms haven't been verified yet, so
-        # this keeps their previous behavior.
+        # Windows에서는 대신 아래 _round_corners()로 진짜 둥근 모서리를
+        # 만든다(왜 여기서 transparent=True를 못 믿는지는 그 함수의 설명
+        # 참고). 다른 플랫폼은 아직 검증을 안 해봐서, 일단 예전 방식
+        # 그대로 둔다.
         transparent=not _IS_WINDOWS,
     )
     _round_corners(window)
@@ -395,9 +412,9 @@ def _new_window(title: str, page: str, js_api, width: int, height: int, position
 
 
 def _reset_status_text(reset_at: Optional[datetime], lang: str) -> str:
-    """The API returns no reset time for a window with no usage yet (e.g.
-    right after a 5-hour session resets, before the next message is
-    sent)."""
+    """아직 그 구간에서 한 번도 사용한 적이 없으면(예: 5시간 세션이 막
+    리셋된 직후, 아직 다음 메시지를 보내기 전) API가 리셋 시각 값을
+    안 내려준다."""
     if reset_at is None:
         return i18n.t("reset.not_started", lang)
     delta = reset_at - datetime.now()
@@ -410,11 +427,13 @@ def _reset_status_text(reset_at: Optional[datetime], lang: str) -> str:
 
 
 def _box_closer(box: list) -> Callable[[], None]:
-    """Returns a close callback that destroys whatever window later gets
-    appended to box. A plain closure over a local list -- not an attribute
-    on the js_api object -- so js_api.close() can reach the window without
-    the js_api object itself ever holding a reference back to it (see
-    _UsageApi's docstring for why that reference cycle matters)."""
+    """나중에 box 리스트에 담기게 될 창을 없애주는, "닫기" 콜백 함수를
+    만들어서 돌려준다. 이걸 js_api 객체의 속성(attribute)으로 직접 들고
+    있는 게 아니라, 지역 변수인 리스트를 감싼 평범한 클로저(closure,
+    함수가 자기 주변 변수를 계속 기억하고 있는 것) 형태로 만든 이유:
+    이렇게 하면 js_api.close()가 창에 접근은 하면서도, js_api 객체
+    자신은 그 창을 가리키는 참조를 절대 직접 들고 있지 않게 된다(이
+    "서로를 참조하는 고리"가 왜 문제가 되는지는 _UsageApi의 설명 참고)."""
     return lambda: box and _safe_destroy(box[0])
 
 
@@ -422,14 +441,15 @@ _MIN_POPUP_SIZE = (260, 220)
 
 
 def _box_resizer(box: list, size: list) -> Callable[[float, float], None]:
-    """Returns a resize callback for the drag handle in common.js
-    (window.pywebview.api.resize_by), reached the same box-closure way as
-    _box_closer -- js_api can't hold the window directly (see
-    _UsageApi's docstring). `size` is the popup's own running [width,
-    height] in logical pixels; frameless windows get no OS resize border,
-    so this is the only thing driving window.resize(), and clamping it
-    here keeps a drag from shrinking the popup smaller than its layout
-    can handle."""
+    """common.js의 드래그 손잡이(window.pywebview.api.resize_by)를 위한
+    리사이즈 콜백을 만들어서 돌려준다. _box_closer와 똑같은 "box를 감싼
+    클로저" 방식을 쓴다 -- js_api가 창을 직접 들고 있으면 안 되기
+    때문이다(_UsageApi의 설명 참고). `size`는 지금 이 팝업의 [가로,
+    세로] 크기를 논리적 픽셀 단위로 계속 기록해두는 값이다. 프레임 없는
+    창은 OS가 제공하는 크기 조절 테두리가 없어서, 이 함수가 window.resize()
+    를 부르는 유일한 통로다. 여기서 최소 크기 아래로는 안 줄어들게
+    막아주는 이유는, 드래그를 계속하다가 팝업이 레이아웃을 감당 못 할
+    만큼 작아지는 걸 막기 위해서다."""
 
     def _resize(dw: float, dh: float) -> None:
         if not box:
@@ -445,21 +465,23 @@ def _box_resizer(box: list, size: list) -> Callable[[float, float], None]:
 
 
 def _box_vertical_resizer(box: list, size: list, grow_upward: bool) -> Callable[[float], None]:
-    """Height-only resize for the usage popup's opacity-strip toggle (see
-    usage.html), distinct from _box_resizer's drag-handle resize: growing
-    via a corner drag should visibly track the cursor (so it always grows
-    toward wherever the user is dragging, the default FixPoint.NORTH|WEST
-    -- keep the top-left corner put), but the strip opening/closing is an
-    automatic resize with no cursor to follow, and blindly growing
-    downward (the same default) would push the window into the taskbar
-    whenever _position_near_tray anchored its bottom edge snugly against
-    it. Using FixPoint.SOUTH there instead grows/shrinks by moving the top
-    edge, keeping the bottom edge (and the anchor next to the taskbar)
-    fixed. `grow_upward` is decided once, at popup creation, from which
-    edge the window was actually anchored to -- kept fixed for the
-    popup's lifetime so opening and closing the strip stay symmetric
-    (using different fix points for the two would leave the window
-    shifted from where it started)."""
+    """사용량 팝업의 투명도 스트립 토글(usage.html 참고) 전용으로, 세로
+    높이만 조절하는 함수다. _box_resizer의 드래그 손잡이용 리사이즈와는
+    다르다: 모서리를 손으로 드래그해서 늘릴 때는 사용자가 드래그하는
+    방향을 그대로 눈으로 따라가야 자연스럽다(그래서 기본값인
+    FixPoint.NORTH|WEST를 쓴다 -- 왼쪽 위 모서리는 그대로 두고 크기만
+    늘어남). 하지만 투명도 스트립이 열리고 닫히는 건 사람이 드래그하는 게
+    아니라 자동으로 일어나는 리사이즈라서 따라갈 커서 자체가 없고, 여기서
+    아무 생각 없이 기본값대로 아래로만 늘리면, _position_near_tray가
+    창의 아래쪽 경계를 작업표시줄에 딱 붙여서 앵커해둔 경우 그대로
+    작업표시줄을 침범하게 된다. 그래서 이럴 땐 FixPoint.SOUTH를 써서,
+    아래쪽 경계(그리고 작업표시줄 옆에 붙여둔 그 앵커 위치)는 그대로
+    고정하고 위쪽 경계를 움직이는 방식으로 늘리고 줄인다. `grow_upward`
+    값은 팝업이 처음 만들어질 때, 그 창이 실제로 어느 쪽 경계에
+    앵커됐는지를 보고 딱 한 번만 정해지고, 그 팝업이 살아있는 동안 계속
+    고정된 값으로 쓰인다 -- 스트립을 열 때와 닫을 때 서로 다른
+    fix_point를 쓰면, 창이 원래 있던 자리에서 슬쩍 어긋나 버리기
+    때문이다."""
     fix_point = (FixPoint.SOUTH | FixPoint.WEST) if grow_upward else (FixPoint.NORTH | FixPoint.WEST)
 
     def _resize(dh: float) -> None:
@@ -475,9 +497,10 @@ def _box_vertical_resizer(box: list, size: list, grow_upward: bool) -> Callable[
 
 
 def _box_opacity_setter(box: list) -> Callable[[int], None]:
-    """Applies a percent to whatever window later gets appended to box, via
-    _apply_window_opacity -- same closure-over-a-list pattern as
-    _box_closer/_box_resizer, so js_api never holds the window directly."""
+    """나중에 box 리스트에 담기게 될 창에, _apply_window_opacity를 통해
+    투명도 퍼센트 값을 적용해주는 함수를 만들어서 돌려준다. _box_closer/
+    _box_resizer와 똑같은 "리스트를 감싼 클로저" 패턴이라서, js_api가
+    창을 직접 들고 있는 일이 없다."""
 
     def _apply(percent: int) -> None:
         if box:
@@ -500,16 +523,18 @@ def _usage_to_dict(usage: UsageData, lang: str) -> dict:
 
 
 class _UsageApi:
-    """close_fn is a plain closure, not a reference to the Window itself --
-    the js_api object must never hold an attribute pointing back to the
-    webview.Window that holds it. That reference cycle (window -> js_api ->
-    window) reliably wedged the WinForms/EdgeChromium backend during
-    testing: some internal reflection walks the js_api's attributes and
-    recurses forever once it loops back to the window
-    (`window.native.AccessibilityObject.Bounds.Empty.Empty...`, a maximum
-    recursion crash that hangs the GUI thread). A closure captured in a
-    local variable isn't reachable via a plain attribute walk, so it
-    doesn't create that cycle."""
+    """close_fn은 Window 객체 자체를 직접 참조하는 게 아니라 평범한
+    클로저다 -- js_api 객체는 자신을 담고 있는 webview.Window를 다시
+    가리키는 속성을 절대로 들고 있으면 안 된다. 그런 "서로를 참조하는
+    고리"(창 -> js_api -> 다시 창)가 생기면, 실제 테스트에서
+    WinForms/EdgeChromium 백엔드가 거의 매번 멈춰버리는 걸 확인했다:
+    내부적으로 뭔가를 검사하는 과정(reflection)이 js_api의 속성들을 쭉
+    훑다가 창을 다시 만나면, 거기서 끝없이 재귀 호출을 반복하게 된다
+    (`window.native.AccessibilityObject.Bounds.Empty.Empty...`처럼
+    계속 파고들다가, 결국 "최대 재귀 깊이 초과"로 GUI 스레드 전체가
+    멈춰버리는 크래시였다). 반면 지역 변수 안에 담아둔 클로저는 이런
+    단순한 "속성을 하나씩 따라가며 훑는" 방식으로는 아예 도달할 수가
+    없어서, 이런 참조 고리 자체가 생기지 않는다."""
 
     def __init__(
         self,
@@ -550,24 +575,26 @@ class _UsageApi:
         self._resize_fn(dw, dh)
 
     def resize_height_by(self, dh: float) -> None:
-        """Used by the opacity-strip toggle, not the drag handle -- see
-        _box_vertical_resizer for why this needs its own resize path."""
+        """드래그 손잡이가 아니라 투명도 스트립 토글이 쓰는 함수다 -- 왜
+        이걸 별도 경로로 분리해야 했는지는 _box_vertical_resizer 설명
+        참고."""
         self._vertical_resize_fn(dh)
 
     def preview_opacity(self, percent: int) -> None:
-        """Live preview while dragging the slider -- applies immediately to
-        the real window (see _apply_window_opacity) but doesn't persist,
-        so letting go isn't required for the preview to be honest about
-        what releasing would look like."""
+        """슬라이더를 드래그하는 동안 실시간으로 미리보기를 보여준다 --
+        (_apply_window_opacity를 통해) 실제 창에 바로 적용은 되지만
+        저장은 안 한다. 그래서 마우스를 떼기 전까지도 미리보기가 "실제로
+        떼면 이렇게 보일 것"이라는 걸 정직하게 보여줄 수 있다."""
         try:
             self._opacity_fn(int(percent))
         except (TypeError, ValueError):
             pass
 
     def set_opacity(self, percent: int) -> None:
-        """Called once, when the slider is released -- applies the final
-        value (in case this fires without a preceding preview_opacity) and
-        persists it so it's remembered next time this popup opens."""
+        """슬라이더에서 손을 뗐을 때 딱 한 번 호출된다 -- 최종 값을
+        적용하고(혹시 이 호출 전에 preview_opacity가 한 번도 안 불렸을
+        경우를 대비해서), 그 값을 저장해서 다음에 이 팝업을 다시 열어도
+        기억하고 있게 한다."""
         try:
             percent = min(100, max(40, int(percent)))
         except (TypeError, ValueError):
@@ -579,21 +606,22 @@ class _UsageApi:
 
 
 _singleton_windows: dict = {}
-# Guards direct reads/writes of _singleton_windows itself (held only
-# briefly) -- separate from the per-key locks below, which instead guard
-# the (potentially slow) create() call so unrelated popup kinds don't wait
-# on each other.
+# _singleton_windows 자체를 읽고 쓰는 걸 보호하는 락(아주 잠깐씩만 잠김)
+# -- 아래 있는 "종류별 락"과는 다른 역할이다. 종류별 락은 (시간이 좀 걸릴
+# 수도 있는) create() 호출 자체를 보호해서, 서로 관련 없는 팝업 종류끼리
+# 서로를 기다리지 않게 해주는 것이다.
 _singleton_dict_lock = threading.Lock()
 _singleton_locks: dict = {}
 _singleton_locks_meta_lock = threading.Lock()
 
 
 def _lock_for(key: str) -> threading.Lock:
-    """One lock per popup kind, not one shared by all of them -- otherwise
-    constructing a slow-to-open popup (e.g. usage, on WebView2/WinForms'
-    first init) would block an unrelated one (e.g. settings) from even
-    starting to open if the two clicks landed close together, despite
-    them being independent singleton slots."""
+    """팝업 종류마다 각자 하나씩 락을 따로 쓴다 (전체가 락 하나를 같이
+    쓰는 게 아니라) -- 안 그러면, 여는 데 시간이 좀 걸리는 팝업 하나를
+    만드는 동안(예: WebView2/WinForms를 맨 처음 초기화할 때) 서로 아무
+    관련 없는 다른 팝업(예: 설정 팝업)이 열리기 시작하는 것조차 막혀버릴
+    수 있다 -- 두 클릭이 우연히 시간상 가깝게 일어났을 뿐인데도, 이
+    둘은 원래 서로 독립적인 슬롯인데 말이다."""
     with _singleton_locks_meta_lock:
         if key not in _singleton_locks:
             _singleton_locks[key] = threading.Lock()
@@ -601,10 +629,10 @@ def _lock_for(key: str) -> threading.Lock:
 
 
 def _focus_or_create(key: str, create: Callable[[], webview.Window]) -> None:
-    """Ensures at most one popup of a given kind (`key`) is open at a time.
-    Without this, clicking the tray icon (or a menu item) again while its
-    popup was already open spawned a second overlapping copy instead of
-    just bringing the existing one forward."""
+    """한 종류(`key`)의 팝업은 한 번에 최대 하나만 열려있게 보장한다.
+    이게 없으면, 이미 열려있는 팝업을 트레이 아이콘(또는 메뉴 항목)을
+    다시 클릭했을 때, 기존 창을 앞으로 가져오는 대신 겹쳐서 새 창이
+    하나 더 떠버렸다."""
     lock = _lock_for(key)
     with lock:
         with _singleton_dict_lock:
@@ -630,9 +658,9 @@ def _focus_or_create(key: str, create: Callable[[], webview.Window]) -> None:
 
 
 def push_usage_update(usage: UsageData) -> None:
-    """Called by main.py after each successful background fetch so an
-    already-open usage popup reflects it immediately, instead of only on
-    the next manual refresh click."""
+    """main.py가 백그라운드에서 사용량을 새로 가져오는 데 성공할 때마다
+    호출한다. 이미 열려있는 사용량 팝업이 있으면 그 자리에서 바로 반영해서,
+    사용자가 직접 새로고침 버튼을 눌러야만 최신 값이 보이는 상황을 막는다."""
     with _singleton_dict_lock:
         window = _singleton_windows.get("usage")
     if window is None:
@@ -646,16 +674,17 @@ def push_usage_update(usage: UsageData) -> None:
 
 
 def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optional[UsageData]]] = None) -> None:
-    """on_refresh, if given, is called with no arguments when the refresh
-    button is clicked and is expected to block until fresh data is ready,
-    returning the new UsageData (or None on failure) -- safe to block here
-    because pywebview already runs js_api calls off its own UI thread."""
+    """on_refresh는 있는 경우, 새로고침 버튼을 눌렀을 때 인자 없이 호출되며
+    새 데이터가 준비될 때까지 그 안에서 멈춰 있어도(block) 된다. 새로운
+    UsageData를 반환하거나(실패 시 None) -- 여기서 멈춰 있어도 괜찮은 이유는
+    pywebview가 js_api 호출을 자기 UI 스레드가 아닌 별도 스레드에서
+    실행해주기 때문이다."""
 
     def create() -> webview.Window:
         box: list = []
-        # 400 used to leave noticeably more empty space than the two cards
-        # (each with a 96px ring + 18px padding) actually needed -- shrunk
-        # to match usage.html's smaller ring/padding (see its <style>).
+        # 예전 높이 400은 카드 두 개(각각 96px 링 + 18px 여백)가 실제로
+        # 필요로 하는 것보다 눈에 띄게 더 많은 빈 공간을 남겼다 -- usage.html의
+        # <style>에서 링/여백을 줄인 것에 맞춰 이 높이도 함께 줄였다.
         width, height = 360, 340
         size = [width, height]
         config = Config.load()
@@ -731,16 +760,16 @@ class _SettingsApi:
 
 
 def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
-    """on_saved, if given, is called right after a successful save -- lets
-    main.py refresh the tray icon immediately instead of waiting for the
-    next scheduled tick."""
+    """on_saved는 있는 경우, 저장에 성공한 직후 호출된다 -- main.py가 다음
+    예약된 갱신 시점까지 기다리지 않고 트레이 아이콘을 바로 새로고침할 수
+    있게 해준다."""
 
     def create() -> webview.Window:
         config = Config.load()
         box: list = []
-        # +90 over the pre-language-picker height (340x440) for the new
-        # language card, so it fits without immediately needing the body's
-        # scrollbar.
+        # 언어 선택 카드가 생기기 전 높이(340x440)보다 90만큼 늘렸다 --
+        # 새로 추가된 언어 카드가 body의 스크롤바 없이 바로 들어가도록 하기
+        # 위해서다.
         width, height = 340, 530
         size = [width, height]
         api = _SettingsApi(config, on_saved, _box_closer(box), _box_resizer(box, size))
@@ -781,10 +810,11 @@ class _AccountApi:
 
 
 def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch: Callable, on_logout: Callable) -> None:
-    """Confirms which account is currently active before doing anything
-    disruptive -- both buttons clear the saved session, so showing this
-    first (rather than acting immediately on a menu click) avoids an
-    accidental click force-logging someone out with no warning."""
+    """뭔가 되돌리기 어려운 동작을 하기 전에, 지금 어느 계정이 활성 상태인지
+    먼저 확인시켜준다 -- 아래 두 버튼 모두 저장된 세션을 지워버리기 때문에,
+    메뉴 클릭에 곧바로 반응해서 실행하는 대신 이 화면을 먼저 보여주면
+    실수로 누른 클릭 한 번 때문에 아무 경고도 없이 강제 로그아웃되는 상황을
+    막을 수 있다."""
 
     def create() -> webview.Window:
         box: list = []
@@ -800,10 +830,10 @@ def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch: Cal
 
 
 class _SplashApi:
-    """The splash has nothing to call back into except which language to
-    render in -- captured at creation time since the window only lives a
-    few seconds, unlike the other popups there's no need to re-check
-    Config mid-flight."""
+    """스플래시 화면이 Python 쪽으로 다시 호출할 일은 어떤 언어로 보여줄지
+    말고는 없다 -- 이 값은 창을 만드는 시점에 미리 받아서 갖고 있는다.
+    이 창은 몇 초밖에 살지 않으므로, 다른 팝업들과 달리 도중에 Config를
+    다시 확인할 필요가 없다."""
 
     def __init__(self, lang: str):
         self._lang = lang
@@ -813,13 +843,12 @@ class _SplashApi:
 
 
 def show_splash(lang: str) -> webview.Window:
-    """Shown immediately at startup, before the (potentially slow) login
-    check and first usage fetch run on a background thread -- without it
-    there's no tray icon yet and no window on screen at all during that
-    gap, so the app looks like it silently failed to launch. Not
-    registered as a singleton window (see _focus_or_create) since it's
-    never reopened -- main.py holds the one reference it needs directly
-    and closes it itself once startup finishes."""
+    """시간이 걸릴 수 있는 로그인 확인과 첫 사용량 조회가 백그라운드 스레드에서
+    끝나기도 전에, 시작하자마자 바로 보여준다 -- 이게 없으면 그 동안에는
+    트레이 아이콘도 없고 화면에 뜬 창도 전혀 없어서, 앱이 조용히 실행에
+    실패한 것처럼 보인다. 다시 열릴 일이 없으므로 싱글턴 창으로 등록하지
+    않는다(_focus_or_create 참고) -- main.py가 필요한 참조를 직접 하나만
+    들고 있다가, 시작 과정이 끝나면 스스로 닫는다."""
     width, height = 260, 220
     window = _new_window(
         "Claude Usage Widget", "splash.html", _SplashApi(lang), width, height, _position_centered(width, height)
