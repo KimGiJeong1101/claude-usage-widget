@@ -7,7 +7,7 @@
 <script src="i18n.js"></script>
 <style>
   .usage-card {
-    padding: 18px;
+    padding: 14px;
     border-left: 4px solid var(--severity, var(--card-border));
     background: linear-gradient(120deg, var(--severity-wash, transparent), var(--card-bg) 55%);
     transition: border-color 0.3s ease, background 0.3s ease;
@@ -15,10 +15,10 @@
     display: flex;
   }
   .usage-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 1; }
-  .usage-info { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .usage-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .usage-title { font-size: 13px; font-weight: 600; letter-spacing: -0.1px; }
   .usage-reset { line-height: 1.4; }
-  .ring { position: relative; width: 96px; height: 96px; flex: none; }
+  .ring { position: relative; width: 80px; height: 80px; flex: none; }
   .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
   .ring-track { fill: none; stroke: #edeef1; stroke-width: 12; }
   .ring-fill {
@@ -34,7 +34,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 21px;
+    font-size: 18px;
     font-weight: 700;
     letter-spacing: -0.3px;
   }

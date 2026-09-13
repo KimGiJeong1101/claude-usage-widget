@@ -607,7 +607,10 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
 
     def create() -> webview.Window:
         box: list = []
-        width, height = 360, 400
+        # 400 used to leave noticeably more empty space than the two cards
+        # (each with a 96px ring + 18px padding) actually needed -- shrunk
+        # to match usage.html's smaller ring/padding (see its <style>).
+        width, height = 360, 340
         size = [width, height]
         config = Config.load()
         opacity = config.usage_popup_opacity
