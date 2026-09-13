@@ -24,6 +24,7 @@ from usage_widget.auth import has_saved_session, login_and_save_session
 from usage_widget.config import DEFAULT_REFRESH_SECONDS, Config
 from usage_widget.fetcher import SessionExpiredError, UsageData, fetch_account_email, fetch_usage
 from usage_widget.paths import session_state_path
+from usage_widget import self_update
 from usage_widget.self_update import apply_update, can_self_update, cleanup_stale_update_files
 from usage_widget.tray_icon import build_icon_image
 from usage_widget.update_check import RELEASES_URL, check_for_update
@@ -256,8 +257,19 @@ def _start_update(icon: pystray.Icon) -> None:
         except Exception as exc:
             _update_in_progress = False
             icon.update_menu()
+            # self_update.py raises these two with a fixed English marker
+            # string instead of a human-readable message, exactly so this
+            # can look them up and show the right language here -- an
+            # unrecognized exception (network errors etc.) just falls
+            # back to its raw text, since there's no way to translate
+            # something we didn't anticipate.
+            known_errors = {
+                self_update._ERROR_NOT_SUPPORTED: "update.error_not_supported",
+                self_update._ERROR_NO_EXE_IN_ZIP: "update.error_no_exe_in_zip",
+            }
+            error_text = i18n.t(known_errors[str(exc)], lang) if str(exc) in known_errors else str(exc)
             icon.notify(
-                i18n.t("notify.update_failed_msg", lang, error=exc), i18n.t("notify.update_failed_title", lang)
+                i18n.t("notify.update_failed_msg", lang, error=error_text), i18n.t("notify.update_failed_title", lang)
             )
             # Whatever broke -- a very old install whose self-update
             # mechanism predates the current one, a network hiccup, a

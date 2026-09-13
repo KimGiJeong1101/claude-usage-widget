@@ -71,6 +71,14 @@ import httpx
 
 _ZIP_URL = "https://github.com/KimGiJeong1101/claude-usage-widget/releases/latest/download/ClaudeUsageWidget-win.zip"
 
+# 아래 두 문구는 사람이 읽으라고 쓴 한국어 메시지가 아니라, "어떤 종류의 에러인지"
+# 코드끼리 구분하기 위한 식별 문자열이다. main.py가 이 정확한 문자열을 보고
+# i18n.py의 번역 테이블에서 사용자 언어에 맞는 문구를 찾아 보여준다. 만약 여기서
+# 그냥 한국어 문장을 직접 넣으면, 사용자가 설정을 영어/일본어/중국어로 바꿔놔도
+# 이 에러가 뜰 때만 한국어 문장이 섞여서 나오는 문제가 생긴다.
+_ERROR_NOT_SUPPORTED = "self-update is not supported on this build/platform"
+_ERROR_NO_EXE_IN_ZIP = "no .exe found in the release zip"
+
 # Waits for the launching process (this app, about to shut itself down) to
 # actually exit before touching any files, then swaps the staged download
 # into place and starts it. Written with the system's ANSI codepage (see
@@ -155,7 +163,7 @@ def _download_new_exe() -> bytes:
     with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
         names = [n for n in zf.namelist() if n.lower().endswith(".exe")]
         if not names:
-            raise RuntimeError("release zip에 .exe가 없음")
+            raise RuntimeError(_ERROR_NO_EXE_IN_ZIP)
         return zf.read(names[0])
 
 
@@ -171,7 +179,7 @@ def apply_update() -> None:
     process down afterwards, since the helper is waiting on this exact
     PID before it touches anything."""
     if not can_self_update():
-        raise RuntimeError("이 빌드/플랫폼에서는 자동 업데이트를 지원하지 않음")
+        raise RuntimeError(_ERROR_NOT_SUPPORTED)
 
     new_exe_bytes = _download_new_exe()
 
