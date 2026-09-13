@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import webview
+from webview.window import FixPoint
 
 from usage_widget import autostart, i18n
 from usage_widget.config import Config
@@ -182,23 +183,31 @@ def _position_near_tray(width: int, height: int) -> tuple:
     cases the old approach got wrong -- a taskbar docked somewhere other
     than the bottom, or a click that lands via the right-click menu's
     "열기" item rather than directly on the tray icon, where the cursor
-    isn't necessarily anywhere near the tray at all."""
+    isn't necessarily anywhere near the tray at all.
+
+    Returns (x, y, grow_upward) -- grow_upward tells the caller which way
+    is safe to expand the window later (see _box_vertical_resizer): True
+    whenever the bottom edge was anchored snugly against something (the
+    taskbar in 3 of the 4 dock orientations below), where growing downward
+    the way a resize normally does would immediately invade it."""
     work = _work_area()
     screen = _screen_size()
     if work is None or screen is None:
         macos_pos = _macos_menubar_position(width, height)
         if macos_pos is not None:
-            return macos_pos
-        return _position_near_cursor(width, height)
+            return (*macos_pos, False)  # anchored under the menu bar at the top -- growing down is fine
+        return (*_position_near_cursor(width, height), False)
 
     left, top, right, bottom = work
     screen_w, screen_h = screen
     gap = 12
+    grow_upward = True
 
     if bottom < screen_h:  # taskbar docked at the bottom (by far the most common)
         x, y = right - width - gap, bottom - height - gap
     elif top > 0:  # taskbar docked at the top
         x, y = right - width - gap, top + gap
+        grow_upward = False  # anchored at the top -- growing down moves away from the taskbar
     elif right < screen_w:  # taskbar docked on the right
         x, y = right - width - gap, bottom - height - gap
     elif left > 0:  # taskbar docked on the left
@@ -208,7 +217,7 @@ def _position_near_tray(width: int, height: int) -> tuple:
 
     x = max(0, min(x, screen_w - width))
     y = max(0, min(y, screen_h - height))
-    return int(x), int(y)
+    return int(x), int(y), grow_upward
 
 
 def _position_centered(width: int, height: int) -> tuple:
@@ -435,6 +444,36 @@ def _box_resizer(box: list, size: list) -> Callable[[float, float], None]:
     return _resize
 
 
+def _box_vertical_resizer(box: list, size: list, grow_upward: bool) -> Callable[[float], None]:
+    """Height-only resize for the usage popup's opacity-strip toggle (see
+    usage.html), distinct from _box_resizer's drag-handle resize: growing
+    via a corner drag should visibly track the cursor (so it always grows
+    toward wherever the user is dragging, the default FixPoint.NORTH|WEST
+    -- keep the top-left corner put), but the strip opening/closing is an
+    automatic resize with no cursor to follow, and blindly growing
+    downward (the same default) would push the window into the taskbar
+    whenever _position_near_tray anchored its bottom edge snugly against
+    it. Using FixPoint.SOUTH there instead grows/shrinks by moving the top
+    edge, keeping the bottom edge (and the anchor next to the taskbar)
+    fixed. `grow_upward` is decided once, at popup creation, from which
+    edge the window was actually anchored to -- kept fixed for the
+    popup's lifetime so opening and closing the strip stay symmetric
+    (using different fix points for the two would leave the window
+    shifted from where it started)."""
+    fix_point = (FixPoint.SOUTH | FixPoint.WEST) if grow_upward else (FixPoint.NORTH | FixPoint.WEST)
+
+    def _resize(dh: float) -> None:
+        if not box:
+            return
+        size[1] = max(_MIN_POPUP_SIZE[1], size[1] + dh)
+        try:
+            box[0].resize(int(size[0]), int(size[1]), fix_point=fix_point)
+        except Exception:
+            pass
+
+    return _resize
+
+
 def _box_opacity_setter(box: list) -> Callable[[int], None]:
     """Applies a percent to whatever window later gets appended to box, via
     _apply_window_opacity -- same closure-over-a-list pattern as
@@ -478,6 +517,7 @@ class _UsageApi:
         refresh_fn: Optional[Callable[[], Optional[UsageData]]],
         close_fn: Callable[[], None],
         resize_fn: Callable[[float, float], None],
+        vertical_resize_fn: Callable[[float], None],
         opacity: int,
         opacity_fn: Callable[[int], None],
         lang: str,
@@ -486,6 +526,7 @@ class _UsageApi:
         self._refresh_fn = refresh_fn
         self._close_fn = close_fn
         self._resize_fn = resize_fn
+        self._vertical_resize_fn = vertical_resize_fn
         self._opacity = opacity
         self._opacity_fn = opacity_fn
         self._lang = lang
@@ -507,6 +548,11 @@ class _UsageApi:
 
     def resize_by(self, dw: float, dh: float) -> None:
         self._resize_fn(dw, dh)
+
+    def resize_height_by(self, dh: float) -> None:
+        """Used by the opacity-strip toggle, not the drag handle -- see
+        _box_vertical_resizer for why this needs its own resize path."""
+        self._vertical_resize_fn(dh)
 
     def preview_opacity(self, percent: int) -> None:
         """Live preview while dragging the slider -- applies immediately to
@@ -616,8 +662,18 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
         opacity = config.usage_popup_opacity
         lang = config.language
         opacity_fn = _box_opacity_setter(box)
-        api = _UsageApi(usage, on_refresh, _box_closer(box), _box_resizer(box, size), opacity, opacity_fn, lang)
-        window = _new_window(i18n.t("tray.tooltip_base", lang), "usage.html", api, width, height, _position_near_tray(width, height))
+        x, y, grow_upward = _position_near_tray(width, height)
+        api = _UsageApi(
+            usage,
+            on_refresh,
+            _box_closer(box),
+            _box_resizer(box, size),
+            _box_vertical_resizer(box, size, grow_upward),
+            opacity,
+            opacity_fn,
+            lang,
+        )
+        window = _new_window(i18n.t("tray.tooltip_base", lang), "usage.html", api, width, height, (x, y))
         box.append(window)
         _apply_initial_opacity(window, opacity)
         return window

@@ -222,18 +222,21 @@
 
   // Growing/shrinking the actual window by the strip's height (instead of
   // just toggling its CSS visibility) keeps the cards below it from being
-  // squeezed into whatever room is left in a fixed-size window. Reuses
-  // resize_by -- the same channel the drag handle uses -- so this stays
-  // consistent with how a manual resize already re-flows the content.
+  // squeezed into whatever room is left in a fixed-size window.
+  // resize_height_by (not resize_by, the drag handle's channel) since
+  // this is an automatic resize with no cursor to visibly track -- it
+  // may grow upward instead of downward to avoid invading the taskbar,
+  // depending on which edge the popup opened anchored against (see
+  // _box_vertical_resizer in webui.py).
   opacityBtn.addEventListener("click", () => {
     const opening = !opacityStrip.classList.contains("visible");
     if (opening) {
       opacityStrip.classList.add("visible");
-      window.pywebview.api.resize_by(0, opacityStrip.offsetHeight);
+      window.pywebview.api.resize_height_by(opacityStrip.offsetHeight);
     } else {
       const stripHeight = opacityStrip.offsetHeight;
       opacityStrip.classList.remove("visible");
-      window.pywebview.api.resize_by(0, -stripHeight);
+      window.pywebview.api.resize_height_by(-stripHeight);
     }
   });
 
