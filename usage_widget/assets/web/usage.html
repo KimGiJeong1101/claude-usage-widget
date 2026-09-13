@@ -276,6 +276,24 @@
     }
   });
 
+  // mouseleave alone only closes the popup if the cursor was inside it to
+  // begin with -- true again once the popup opens exactly at the cursor,
+  // but with it now anchored near the taskbar/tray instead (see
+  // _position_near_tray in webui.py), the cursor can easily start outside
+  // it, in which case mouseleave never fires at all and it sits open
+  // until something happens to brush over it once. Closing on the native
+  // window losing focus doesn't depend on where the cursor started, and
+  // matches how an actual Windows flyout (volume/network/battery) closes
+  // as soon as you click elsewhere. Enabled a beat after the window
+  // actually finishes opening rather than from page-load, in case the
+  // native window's own creation/positioning causes a transient focus
+  // blip before it settles -- closing itself the instant it appears would
+  // be worse than the bug this is fixing.
+  let blurCloseArmed = false;
+  window.addEventListener("blur", () => {
+    if (blurCloseArmed && !pinned) window.pywebview.api.close();
+  });
+
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();
     applyI18n(data.language || "ko");
@@ -284,6 +302,7 @@
     opacityInput.value = opacity;
     opacityValueLabel.textContent = `${opacity}%`;
     initResizeGrip();
+    setTimeout(() => (blurCloseArmed = true), 300);
   });
 
   // Called from Python (webui.push_usage_update) when the background
