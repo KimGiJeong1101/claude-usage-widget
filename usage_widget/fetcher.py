@@ -11,6 +11,7 @@ claude.ai는 Cloudflare(웹사이트를 봇으로부터 보호해주는 서비�
 통과할 수 있다.
 """
 
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -21,6 +22,18 @@ from usage_widget.paths import session_state_path
 
 API_BASE = "https://claude.ai/api/organizations"
 BOOTSTRAP_ENDPOINT = "https://claude.ai/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk"
+
+# 이 파일의 두 함수(fetch_usage/fetch_account_email)는 호출될 때마다 headless
+# Chrome을 매번 새로 하나씩 띄운다. 그런데 이 앱은 백그라운드 자동 갱신
+# 스레드(main.py의 _refresh_loop, 기본 60초 주기)와 사용자가 팝업에서
+# 직접 누르는 수동 새로고침이 서로 다른 스레드에서 언제든 동시에 실행될 수
+# 있다 -- 타이밍이 겹치면 헤드리스 Chrome 프로세스가 한 번에 2개씩 뜨는
+# 셈이다. 사양이 넉넉한 PC에서는 별문제 없이 둘 다 제시간에 끝나지만,
+# CPU/메모리가 빠듯한 PC에서는 이 순간 리소스 경쟁 때문에 둘 중 하나(또는
+# 둘 다)가 Playwright의 기본 타임아웃(30초)을 넘겨버려 "새로고침이 이유
+# 없이 가끔 실패하는" 것처럼 보이는 원인이 된다. 이 락으로 두 headless
+# Chrome 실행이 절대 동시에 겹치지 않고 항상 순서대로만 실행되게 막는다.
+_fetch_lock = threading.Lock()
 
 
 class SessionExpiredError(Exception):
@@ -55,7 +68,7 @@ def fetch_usage() -> UsageData:
     if not session_state_path().exists():
         raise SessionExpiredError("no saved session")
 
-    with sync_playwright() as p:
+    with _fetch_lock, sync_playwright() as p:
         browser = p.chromium.launch(headless=True, channel="chrome")
         try:
             context = browser.new_context(storage_state=str(session_state_path()))
@@ -107,7 +120,7 @@ def fetch_account_email() -> str:
     if not session_state_path().exists():
         raise SessionExpiredError("no saved session")
 
-    with sync_playwright() as p:
+    with _fetch_lock, sync_playwright() as p:
         browser = p.chromium.launch(headless=True, channel="chrome")
         try:
             context = browser.new_context(storage_state=str(session_state_path()))
