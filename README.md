@@ -357,7 +357,7 @@ flowchart TD
   방식이 안 통해서 아직 다운로드 페이지 안내로만 동작합니다.
 - 릴리즈에는 `ClaudeUsageWidget-win.zip`처럼 고정된 이름(자동 업데이트/README
   다운로드 링크가 항상 최신을 가리키기 위해 절대 안 바뀌는 이름)과, 사람이 알아보기
-  쉽게 버전이 붙은 사본(`ClaudeUsageWidget-0.3.6-win.zip`)이 같이 올라갑니다. 후자는
+  쉽게 버전이 붙은 사본(`ClaudeUsageWidget-0.3.7-win.zip`)이 같이 올라갑니다. 후자는
   [Releases 페이지](https://github.com/KimGiJeong1101/claude-usage-widget/releases)에서만
   볼 수 있습니다.
 - 실행하면 로그인 확인/첫 사용량 조회가 끝나기 전까지 트레이 아이콘 자체가 아직

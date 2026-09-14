@@ -369,7 +369,7 @@ different crash found in real use. More detail below.
 - Releases ship both a fixed filename (`ClaudeUsageWidget-win.zip`, for example —
   never renamed, since the auto-updater and README download links depend on it
   always pointing at the latest release) and a versioned copy
-  (`ClaudeUsageWidget-0.3.6-win.zip`) for humans to tell builds apart. The latter
+  (`ClaudeUsageWidget-0.3.7-win.zip`) for humans to tell builds apart. The latter
   is only visible on the [Releases page](https://github.com/KimGiJeong1101/claude-usage-widget/releases).
 - There used to be a gap right after launch — before the login check and first
   usage fetch finished, the tray icon didn't exist yet, so nothing showed up on
