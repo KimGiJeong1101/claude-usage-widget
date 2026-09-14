@@ -2,6 +2,7 @@
 스타일 등)을 담당하는 파일. 이 값들은 config.json이라는 파일에 저장된다."""
 
 import json
+import os
 from dataclasses import asdict, dataclass, fields
 
 from usage_widget.i18n import DEFAULT_LANGUAGE
@@ -54,7 +55,19 @@ class Config:
             return cls()
 
     def save(self) -> None:
-        config_path().write_text(
+        # 바로 config.json에 write_text로 덮어쓰지 않고, 임시 파일에 먼저 쓴
+        # 다음 os.replace로 바꿔치기하는 이유: 설정 팝업 저장과 사용량 팝업의
+        # 투명도 저장처럼 서로 다른 스레드가 이 파일에 거의 동시에 쓰는
+        # 경우가 실제로 있는데, write_text는 파일 내용을 원자적으로(한
+        # 번에 통째로) 바꿔주는 게 아니라서 두 스레드의 쓰기가 겹치면
+        # JSON이 반쯤 섞여서 깨진 파일이 될 위험이 있다. os.replace는 OS
+        # 수준에서 원자적인 교체를 보장해서, 항상 "이전 내용 전체" 아니면
+        # "새 내용 전체" 둘 중 하나만 보이게 된다 -- 둘이 섞인 중간 상태가
+        # 보일 일이 없다.
+        path = config_path()
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        tmp_path.write_text(
             json.dumps(asdict(self), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        os.replace(tmp_path, path)

@@ -8,6 +8,7 @@ import time
 
 from playwright.sync_api import sync_playwright
 
+from usage_widget.fetcher import browser_launch_lock
 from usage_widget.paths import session_state_path
 
 USAGE_URL = "https://claude.ai/settings/usage"
@@ -22,42 +23,60 @@ def login_and_save_session() -> None:
     """진짜 브라우저 창을 하나 띄워서 사용자가 직접 claude.ai에 로그인하게
     하고, 로그인이 끝나면 그때 생긴 쿠키/localStorage를
     session_state_path()가 가리키는 파일에 저장한다."""
-    with sync_playwright() as p:
-        # Playwright에 기본으로 딸려오는 "Chrome for Testing" 브라우저가
-        # 아니라, 사용자 컴퓨터에 실제로 설치돼있는 정품 Chrome을 띄운다.
-        # 안 그러면 claude.ai의 "너 사람 맞아?" 확인(봇 차단)에 걸려서
-        # 로그인 화면이 계속 반복된다.
-        browser = p.chromium.launch(
-            headless=False,
-            channel="chrome",
-            args=["--disable-blink-features=AutomationControlled"],
-        )
-        context = browser.new_context(viewport=None)
-        page = context.new_page()
-        page.goto(USAGE_URL)
+    # fetcher.py의 headless Chrome 실행과 같은 락을 쓴다 -- 세션이 만료돼서
+    # 백그라운드 자동갱신 스레드가 재로그인 창을 띄우려는 바로 그 순간에
+    # 사용자가 수동 새로고침(또는 계정 전환)을 눌러도, 이 락 때문에 로그인
+    # 창이 동시에 2개 뜨는 대신 순서대로 기다리게 된다.
+    with browser_launch_lock:
+        # 락을 기다리는 동안 다른 스레드가 이미 로그인을 끝내고 세션 파일을
+        # 만들어놨을 수도 있다 -- 그런 경우엔 로그인 창을 또 띄우지 않고
+        # 그냥 넘어간다 (안 그러면 순서만 뒤로 밀렸을 뿐, 로그인 창이 두 번
+        # 뜨는 건 똑같이 일어난다).
+        if session_state_path().exists():
+            return
+        with sync_playwright() as p:
+            # Playwright에 기본으로 딸려오는 "Chrome for Testing" 브라우저가
+            # 아니라, 사용자 컴퓨터에 실제로 설치돼있는 정품 Chrome을 띄운다.
+            # 안 그러면 claude.ai의 "너 사람 맞아?" 확인(봇 차단)에 걸려서
+            # 로그인 화면이 계속 반복된다.
+            browser = p.chromium.launch(
+                headless=False,
+                channel="chrome",
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            try:
+                context = browser.new_context(viewport=None)
+                page = context.new_page()
+                page.goto(USAGE_URL)
 
-        # claude.ai는 로그인이 성공하면 "sessionKey"라는 쿠키를 만들어준다.
-        # "로그인 성공했는지"를 페이지 주소(URL)로 판단하지 않고 이 쿠키가
-        # 생겼는지를 주기적으로 확인하는 이유: goto(USAGE_URL)로 이동한
-        # 시점엔 로그인 여부와 상관없이 이미 주소는 USAGE_URL이라 URL만
-        # 봐서는 구분이 안 되고, 로그인하는 동안 여러 중간 화면을 거쳐갈 수도
-        # 있기 때문이다.
-        try:
-            while not _has_session_cookie(context):
-                time.sleep(1)
-        except Exception:
-            return  # 로그인이 끝나기 전에 사용자가 브라우저 창을 닫아버린 경우
+                # claude.ai는 로그인이 성공하면 "sessionKey"라는 쿠키를 만들어준다.
+                # "로그인 성공했는지"를 페이지 주소(URL)로 판단하지 않고 이 쿠키가
+                # 생겼는지를 주기적으로 확인하는 이유: goto(USAGE_URL)로 이동한
+                # 시점엔 로그인 여부와 상관없이 이미 주소는 USAGE_URL이라 URL만
+                # 봐서는 구분이 안 되고, 로그인하는 동안 여러 중간 화면을 거쳐갈 수도
+                # 있기 때문이다.
+                try:
+                    while not _has_session_cookie(context):
+                        time.sleep(1)
+                except Exception:
+                    return  # 로그인이 끝나기 전에 사용자가 브라우저 창을 닫아버린 경우
 
-        # 로그인이 끝나면 Settings > Usage 화면이 아니라 다른 화면(예: 채팅
-        # 첫 화면)에 있을 수도 있으니, 여기서 다시 한번 명시적으로 이동한다.
-        # goto()는 페이지의 "load"(다 불러왔다) 이벤트까지만 기다리는데,
-        # claude.ai는 웹소켓이나 폴링 같은 백그라운드 통신을 끊임없이 계속
-        # 하기 때문에, 그보다 더 엄격한 "networkidle"(네트워크가 완전히
-        # 조용해질 때까지)을 기다리면 그냥 시간 초과로 실패한다.
-        page.goto(USAGE_URL)
+                # 로그인이 끝나면 Settings > Usage 화면이 아니라 다른 화면(예: 채팅
+                # 첫 화면)에 있을 수도 있으니, 여기서 다시 한번 명시적으로 이동한다.
+                # goto()는 페이지의 "load"(다 불러왔다) 이벤트까지만 기다리는데,
+                # claude.ai는 웹소켓이나 폴링 같은 백그라운드 통신을 끊임없이 계속
+                # 하기 때문에, 그보다 더 엄격한 "networkidle"(네트워크가 완전히
+                # 조용해질 때까지)을 기다리면 그냥 시간 초과로 실패한다.
+                page.goto(USAGE_URL)
 
-        context.storage_state(path=str(session_state_path()))
-        browser.close()
+                context.storage_state(path=str(session_state_path()))
+            finally:
+                # try/finally로 감싸는 이유: 로그인 쿠키가 생긴 뒤에도(위 while
+                # 루프를 빠져나온 뒤에도) page.goto()나 storage_state() 저장이
+                # 실패할 수 있다(예: 네트워크가 잠깐 끊기거나 디스크 쓰기 실패).
+                # 이런 경우에도 browser.close()가 항상 불려야, 띄워놓은 Chrome
+                # 창이 고아 프로세스로 계속 남아있는 걸 막을 수 있다.
+                browser.close()
 
 
 def has_saved_session() -> bool:

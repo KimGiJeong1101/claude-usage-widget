@@ -31,7 +31,7 @@ import pystray
 from usage_widget import __version__, i18n, single_instance
 from usage_widget.auth import has_saved_session, login_and_save_session
 from usage_widget.config import DEFAULT_REFRESH_SECONDS, Config
-from usage_widget.fetcher import SessionExpiredError, UsageData, fetch_account_email, fetch_usage
+from usage_widget.fetcher import SessionExpiredError, UsageData, browser_launch_lock, fetch_account_email, fetch_usage
 from usage_widget.paths import session_state_path
 from usage_widget import self_update
 from usage_widget.self_update import apply_update, can_self_update, cleanup_stale_update_files
@@ -156,8 +156,15 @@ def _manual_refresh(icon: pystray.Icon) -> Optional[UsageData]:
 
 
 def _do_logout(icon: pystray.Icon) -> None:
+    """세션 파일을 지우기 전에 fetcher.py와 같은 락(browser_launch_lock)을
+    먼저 잡는다 -- 안 그러면, 마침 백그라운드 스레드가 이 파일을 읽어서
+    (storage_state로) Chrome 요청을 보내는 도중에 파일이 사라져버려서,
+    "세션이 만료됐다"는 정상적인 에러 대신 알아보기 힘든 에러가 나는
+    경우가 생길 수 있다. 이 락 덕분에 파일 삭제는 항상 진행 중이던
+    요청이 끝난 뒤에만 일어난다."""
     global _logged_out, _account_email
-    session_state_path().unlink(missing_ok=True)
+    with browser_launch_lock:
+        session_state_path().unlink(missing_ok=True)
     _logged_out = True
     _account_email = None
     _update_icon(icon)
@@ -172,7 +179,10 @@ def _do_switch_account(icon: pystray.Icon) -> None:
 
     def worker():
         global _latest_usage, _last_error, _logged_out
-        session_state_path().unlink(missing_ok=True)
+        # _do_logout과 같은 이유로, 삭제 자체도 락으로 감싼다(_do_logout의
+        # 독스트링 참고).
+        with browser_launch_lock:
+            session_state_path().unlink(missing_ok=True)
         try:
             login_and_save_session()
             _latest_usage = _fetch_with_relogin()

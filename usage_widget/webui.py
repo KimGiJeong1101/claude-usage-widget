@@ -641,20 +641,25 @@ def _focus_or_create(key: str, create: Callable[[], webview.Window]) -> None:
             window = create()
             with _singleton_dict_lock:
                 _singleton_windows[key] = window
+
+            # 이 등록을 락을 놓기 전에(같은 with lock: 블록 안에서) 해두는
+            # 이유: 만약 락을 놓은 뒤에 등록한다면, 그 짧은 틈에 창이 아주
+            # 빠르게 닫혀버리는 극단적인 경우 이 핸들러가 아예 실행되지
+            # 못해서, 이미 닫힌 창에 대한 죽은 참조가 _singleton_windows에
+            # 영원히 남아있게 될 수 있다 -- 그러면 이 종류의 팝업은 앱을
+            # 재시작하기 전까지 다시는 안 열리게 된다.
+            def _unregister():
+                with lock:
+                    with _singleton_dict_lock:
+                        if _singleton_windows.get(key) is window:
+                            del _singleton_windows[key]
+
+            window.events.closed += _unregister
     if existing is not None:
         try:
             existing.show()
         except Exception:
             pass
-        return
-
-    def _unregister():
-        with lock:
-            with _singleton_dict_lock:
-                if _singleton_windows.get(key) is window:
-                    del _singleton_windows[key]
-
-    window.events.closed += _unregister
 
 
 def push_usage_update(usage: UsageData) -> None:
@@ -735,15 +740,24 @@ class _SettingsApi:
         }
 
     def save(self, payload: dict) -> None:
+        # self._config는 이 설정 팝업을 처음 열었을 때 시점의 스냅샷이다.
+        # 그 사이에 사용량 팝업에서 투명도를 바꿔서 저장했을 수도 있는데,
+        # 여기서 그 스냅샷을 그대로 통째로 저장해버리면 그 변경사항을
+        # 조용히 덮어써서 없애버리게 된다(코드 점검 중 발견한, 실제로
+        # 일어날 수 있는 값 유실 버그). 그래서 저장 직전에 파일에서 최신
+        # 값을 다시 읽어와서, 이 팝업이 담당하는 필드만 바꾸고 나머지는
+        # 그대로 둔다.
+        config = Config.load()
         try:
-            self._config.refresh_seconds = max(5, int(payload.get("refresh_seconds", self._config.refresh_seconds)))
+            config.refresh_seconds = max(5, int(payload.get("refresh_seconds", config.refresh_seconds)))
         except (TypeError, ValueError):
             pass
-        self._config.tray_icon_style = payload.get("tray_icon_style") or DEFAULT_STYLE
+        config.tray_icon_style = payload.get("tray_icon_style") or DEFAULT_STYLE
         language = payload.get("language")
         if language in i18n.LANGUAGE_NAMES:
-            self._config.language = language
-        self._config.save()
+            config.language = language
+        config.save()
+        self._config = config
         if _IS_WINDOWS:
             if payload.get("autostart"):
                 autostart.enable()

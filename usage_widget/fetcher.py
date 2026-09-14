@@ -31,9 +31,16 @@ BOOTSTRAP_ENDPOINT = "https://claude.ai/edge-api/bootstrap?statsig_hashing_algor
 # 셈이다. 사양이 넉넉한 PC에서는 별문제 없이 둘 다 제시간에 끝나지만,
 # CPU/메모리가 빠듯한 PC에서는 이 순간 리소스 경쟁 때문에 둘 중 하나(또는
 # 둘 다)가 Playwright의 기본 타임아웃(30초)을 넘겨버려 "새로고침이 이유
-# 없이 가끔 실패하는" 것처럼 보이는 원인이 된다. 이 락으로 두 headless
-# Chrome 실행이 절대 동시에 겹치지 않고 항상 순서대로만 실행되게 막는다.
-_fetch_lock = threading.Lock()
+# 없이 가끔 실패하는" 것처럼 보이는 원인이 된다.
+#
+# auth.py의 login_and_save_session()(로그인용 화면이 보이는 Chrome)도 이
+# 락을 같이 쓴다 -- 그래야 "세션이 만료돼서 백그라운드 스레드가 재로그인
+# 창을 띄우려는 순간, 하필 사용자가 수동 새로고침을 눌러서 재로그인 창이
+# 하나 더 뜨는" 것 같은 경쟁도 막을 수 있다. 이름 앞에 밑줄(_)이 없는 건
+# 그래서다 -- 이 파일 밖(auth.py)에서도 가져다 쓰는 걸 전제로 한 이름이다.
+# 이 락으로 headless/화면 있는 Chrome 실행이 절대 동시에 겹치지 않고 항상
+# 순서대로만 실행되게 막는다.
+browser_launch_lock = threading.Lock()
 
 
 class SessionExpiredError(Exception):
@@ -68,7 +75,7 @@ def fetch_usage() -> UsageData:
     if not session_state_path().exists():
         raise SessionExpiredError("no saved session")
 
-    with _fetch_lock, sync_playwright() as p:
+    with browser_launch_lock, sync_playwright() as p:
         browser = p.chromium.launch(headless=True, channel="chrome")
         try:
             context = browser.new_context(storage_state=str(session_state_path()))
@@ -120,7 +127,7 @@ def fetch_account_email() -> str:
     if not session_state_path().exists():
         raise SessionExpiredError("no saved session")
 
-    with _fetch_lock, sync_playwright() as p:
+    with browser_launch_lock, sync_playwright() as p:
         browser = p.chromium.launch(headless=True, channel="chrome")
         try:
             context = browser.new_context(storage_state=str(session_state_path()))
