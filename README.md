@@ -195,7 +195,7 @@ Python 설치 없이 바로 쓸 수 있는 빌드입니다. 아래 링크는 항
 > **macOS 빌드는 아직 실제 Mac에서 동작 검증이 안 됐고, 현재 Apple Silicon(M1 이상) 전용입니다.** GitHub Actions의 `macos-latest` 러너가 arm64라 빌드 자체가 그렇게 나옵니다 — Intel Mac에서는 아키텍처가 안 맞아 실행 자체가 안 됩니다. macOS에서 문제를 겪으셨다면 이슈로 알려주세요.
 
 > [!IMPORTANT]
-> **최초 로그인에는 Google Chrome이 실제로 설치되어 있어야 합니다.** claude.ai의 봇 차단을 우회하려면 진짜 Chrome의 네트워크 스택이 필요해서(자세한 이유는 [핵심 로직](#-아키텍처) 참고), 최초 실행 시 뜨는 로그인 창은 Playwright가 시스템에 설치된 Chrome을 직접 띄우는 방식입니다. Chrome이 없으면 로그인 단계에서 조용히 실패하면서 **트레이 아이콘도 안 뜨고 에러 메시지도 없이 그냥 종료된 것처럼 보일 수 있습니다** — 이럴 땐 Chrome을 설치한 뒤 다시 실행해보세요(v0.3.7부터는 이런 경우 에러 메시지 창이 대신 뜹니다).
+> **최초 로그인에는 Google Chrome이 실제로 설치되어 있어야 합니다.** claude.ai의 봇 차단을 우회하려면 진짜 Chrome의 네트워크 스택이 필요해서(자세한 이유는 [핵심 로직](#-아키텍처) 참고), 최초 실행 시 뜨는 로그인 창은 Playwright가 시스템에 설치된 Chrome을 직접 띄우는 방식입니다. Chrome이 없으면 로그인 단계에서 조용히 실패하면서 **트레이 아이콘도 안 뜨고 에러 메시지도 없이 그냥 종료된 것처럼 보일 수 있습니다** — 이럴 땐 Chrome을 설치한 뒤 다시 실행해보세요(v0.3.8부터는 이런 경우 에러 메시지 창이 대신 뜹니다).
 
 <details>
 <summary><b>실행 시 경고가 뜬다면?</b></summary>
@@ -360,7 +360,7 @@ flowchart TD
   방식이 안 통해서 아직 다운로드 페이지 안내로만 동작합니다.
 - 릴리즈에는 `ClaudeUsageWidget-win.zip`처럼 고정된 이름(자동 업데이트/README
   다운로드 링크가 항상 최신을 가리키기 위해 절대 안 바뀌는 이름)과, 사람이 알아보기
-  쉽게 버전이 붙은 사본(`ClaudeUsageWidget-0.3.7-win.zip`)이 같이 올라갑니다. 후자는
+  쉽게 버전이 붙은 사본(`ClaudeUsageWidget-0.3.8-win.zip`)이 같이 올라갑니다. 후자는
   [Releases 페이지](https://github.com/KimGiJeong1101/claude-usage-widget/releases)에서만
   볼 수 있습니다.
 - 실행하면 로그인 확인/첫 사용량 조회가 끝나기 전까지 트레이 아이콘 자체가 아직

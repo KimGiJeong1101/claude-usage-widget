@@ -197,7 +197,7 @@ No Python install needed — these are ready-to-run builds. The links below alwa
 > **The macOS build hasn't been verified on a real Mac yet, and it's currently Apple Silicon (M1+) only.** GitHub Actions' `macos-latest` runner is arm64, so that's what the build comes out as — it won't run at all on an Intel Mac (wrong architecture). If you run into trouble on macOS, please open an issue.
 
 > [!IMPORTANT]
-> **Google Chrome needs to actually be installed for the first login.** Getting past claude.ai's bot protection requires a real Chrome network stack (see [Architecture](#-architecture) for why), so the login window that opens on first run is Playwright launching the system's actual installed Chrome. Without it, login fails quietly and **the app can look like it launched and did nothing at all — no tray icon, no error** — install Chrome and try again (from v0.3.7 onward, an error dialog appears instead).
+> **Google Chrome needs to actually be installed for the first login.** Getting past claude.ai's bot protection requires a real Chrome network stack (see [Architecture](#-architecture) for why), so the login window that opens on first run is Playwright launching the system's actual installed Chrome. Without it, login fails quietly and **the app can look like it launched and did nothing at all — no tray icon, no error** — install Chrome and try again (from v0.3.8 onward, an error dialog appears instead).
 
 <details>
 <summary><b>Seeing a warning when you run it?</b></summary>
@@ -372,7 +372,7 @@ different crash found in real use. More detail below.
 - Releases ship both a fixed filename (`ClaudeUsageWidget-win.zip`, for example —
   never renamed, since the auto-updater and README download links depend on it
   always pointing at the latest release) and a versioned copy
-  (`ClaudeUsageWidget-0.3.7-win.zip`) for humans to tell builds apart. The latter
+  (`ClaudeUsageWidget-0.3.8-win.zip`) for humans to tell builds apart. The latter
   is only visible on the [Releases page](https://github.com/KimGiJeong1101/claude-usage-widget/releases).
 - There used to be a gap right after launch — before the login check and first
   usage fetch finished, the tray icon didn't exist yet, so nothing showed up on
