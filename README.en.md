@@ -196,6 +196,9 @@ No Python install needed — these are ready-to-run builds. The links below alwa
 > [!WARNING]
 > **The macOS build hasn't been verified on a real Mac yet, and it's currently Apple Silicon (M1+) only.** GitHub Actions' `macos-latest` runner is arm64, so that's what the build comes out as — it won't run at all on an Intel Mac (wrong architecture). If you run into trouble on macOS, please open an issue.
 
+> [!IMPORTANT]
+> **Google Chrome needs to actually be installed for the first login.** Getting past claude.ai's bot protection requires a real Chrome network stack (see [Architecture](#-architecture) for why), so the login window that opens on first run is Playwright launching the system's actual installed Chrome. Without it, login fails quietly and **the app can look like it launched and did nothing at all — no tray icon, no error** — install Chrome and try again (from v0.3.7 onward, an error dialog appears instead).
+
 <details>
 <summary><b>Seeing a warning when you run it?</b></summary>
 <br>
