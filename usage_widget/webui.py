@@ -19,6 +19,7 @@ pystray의 메뉴 콜백에서 root.after(...) 같은 걸 거치지 않고 팝�
 
 import ctypes
 import json
+import os
 import sys
 import threading
 from datetime import datetime
@@ -35,6 +36,22 @@ from usage_widget.tray_icon import DEFAULT_STYLE
 
 _ASSET_DIR = Path(__file__).parent / "assets" / "web"
 _IS_WINDOWS = sys.platform == "win32"
+
+if _IS_WINDOWS:
+    # 팝업 창들이 쓰는 WebView2(임베디드 Edge 브라우저 엔진)는 기본적으로
+    # GPU 하드웨어 가속을 쓴다. 그런데 그래픽 드라이버가 불안정한 PC에서는,
+    # 특히 자동 업데이트로 여러 팝업 창을 한꺼번에 닫았다가 새 프로세스가
+    # 곧바로 다시 여러 개를 새로 띄우는 순간처럼 GPU 컨텍스트를 짧은
+    # 시간에 여러 번 만들었다 없앴다 하면, 이게 그래픽 드라이버 쪽
+    # 블루스크린(SYSTEM_SERVICE_EXCEPTION, dxgmms2.sys 등)의 방아쇠가 될
+    # 수 있다는 실사용 보고가 있었다(원래 드라이버 자체가 불안정했던
+    # 게 근본 원인으로 보이지만, 이 앱이 그 상황을 건드릴 가능성 자체를
+    # 없애기로 함). 이 앱의 화면은 단순한 텍스트/도형뿐이라 GPU 가속의
+    # 이득이 거의 없어서, 아예 꺼서 위험을 없앤다.
+    # WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS는 pywebview가 아니라 WebView2
+    # 런타임 자체가 직접 읽는 환경변수라서, 창을 만들기 전인 지금(이
+    # 모듈이 로드되는 시점)에 미리 설정해둬야 한다.
+    os.environ.setdefault("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu")
 
 _root_window: Optional[webview.Window] = None
 
