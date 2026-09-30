@@ -449,6 +449,38 @@ def _notify_already_running() -> None:
         root.destroy()
 
 
+def _notify_startup_failed(error: Exception) -> None:
+    """시작 과정(로그인, 첫 사용량 조회 등)이 실패하면 부르는 함수. 이게
+    없으면 무슨 일이 생기는지: bootstrap()은 데몬 스레드(daemon thread,
+    메인 스레드가 끝나면 미처 다 못 끝내도 그냥 같이 죽어버리는 보조
+    스레드)라서, 여기서 예외가 나도 파이썬 기본 동작은 그냥 콘솔(터미널
+    화면)에 에러 내용을 찍어주는 것뿐이다. 그런데 배포용 exe는
+    "--windowed"(콘솔 창 자체가 없는) 방식으로 빌드돼 있어서, 그 에러
+    출력이 갈 곳이 아예 없다 -- 사용자 입장에서는 스플래시 화면이
+    반짝하고 나타났다 사라지고, 트레이 아이콘도 안 뜨고, 에러 메시지도
+    전혀 없이 그냥 프로그램이 조용히 종료돼버린 것처럼 보인다("실행했는데
+    아무것도 안 뜬다"). _notify_already_running()과 같은 이유로 여기서도
+    tkinter의 기본 메시지 박스를 쓴다 -- 아직 pywebview 관련 기능이 하나도
+    제대로 준비되지 않았을 수 있는 상황이라서다.
+
+    가장 흔한 원인은 처음 실행하는 컴퓨터에 로그인용 실제 Chrome이 설치돼
+    있지 않은 경우라서, 메시지 문구에 그 가능성을 안내 문구로 같이
+    적어둔다(정확한 원인이 아니어도 큰 문제는 없다 -- 실제 에러 메시지
+    원문도 같이 보여주기 때문이다)."""
+    import tkinter
+    from tkinter import messagebox
+
+    lang = Config.load().language
+    root = tkinter.Tk()
+    root.withdraw()
+    try:
+        messagebox.showerror(
+            i18n.t("startup.failed_title", lang), i18n.t("startup.failed_msg", lang, error=str(error))
+        )
+    finally:
+        root.destroy()
+
+
 def run() -> None:
     """예전에는 pywebview의 이벤트 루프(run_gui_loop)가 시작되기도 전에,
     로그인 확인과 첫 사용량 조회를 메인 스레드에서 그대로 멈춰서 기다렸다
@@ -491,8 +523,14 @@ def run() -> None:
                 login_and_save_session()
             _latest_usage = _fetch_with_relogin()
             _refresh_account_email()
-        except Exception:
+        except Exception as exc:
             close_splash(splash)
+            # 메시지 박스를 shutdown_gui()보다 반드시 먼저 불러야 한다 --
+            # shutdown_gui()가 숨겨진 root 창을 없애버리면 메인 스레드의
+            # run_gui_loop()가 바로 끝나면서 프로세스 전체가 종료되기
+            # 시작하는데, 이 bootstrap()은 데몬 스레드라서 그 순간 메시지
+            # 박스를 채 띄우기도 전에 강제로 같이 죽어버릴 수 있다.
+            _notify_startup_failed(exc)
             shutdown_gui()
             raise
         close_splash(splash)
