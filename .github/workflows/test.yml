@@ -1,0 +1,46 @@
+name: Tests
+
+# usage_widget/*.py에 변경이 생길 때마다(main 브랜치 push + PR) 자동으로
+# pytest를 돌린다. 2026-10-09 이전까지는 자동 테스트가 전혀 없어서,
+# 동시성 버그를 고친 코드가 나중에 또 다른 회귀를 만들어도(실제로
+# 2026-09-30에 한 번 있었음 -- notes 저장소 섹션 28 참고) 사람이 직접
+# 알아채기 전까지는 아무도 모르는 구조였다. tests/ 아래 pytest는 그런
+# 회귀를 자동으로 잡기 위한 것.
+#
+# Windows + macOS 양쪽에서 돌리는 이유: pywebview가 플랫폼마다 다른
+# 백엔드(Windows는 WebView2, macOS는 WKWebView)를 쓰기 때문에, 한쪽에서만
+# 돌리면 다른 플랫폼에서만 깨지는 import 오류 등을 놓칠 수 있다.
+# release.yml의 빌드 매트릭스와 동일한 러너를 사용.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "usage_widget/**.py"
+      - "tests/**.py"
+      - "pyproject.toml"
+  pull_request:
+    paths:
+      - "usage_widget/**.py"
+      - "tests/**.py"
+      - "pyproject.toml"
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[test]"
+
+      - name: Run tests
+        run: pytest tests/ -v
