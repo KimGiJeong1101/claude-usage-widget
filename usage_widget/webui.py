@@ -32,7 +32,7 @@ from webview.window import FixPoint
 from usage_widget import autostart, i18n
 from usage_widget.config import Config
 from usage_widget.fetcher import UsageData
-from usage_widget.tray_icon import DEFAULT_STYLE
+from usage_widget.tray_icon import DEFAULT_STYLE, STYLES
 
 _ASSET_DIR = Path(__file__).parent / "assets" / "web"
 _IS_WINDOWS = sys.platform == "win32"
@@ -750,7 +750,10 @@ class _SettingsApi:
     def get_initial_data(self) -> dict:
         return {
             "refresh_seconds": self._config.refresh_seconds,
-            "tray_icon_style": self._config.tray_icon_style,
+            # 저장된 값이 지금은 없어진 스타일(예: 예전의 "liquid")이면, 드롭다운에
+            # 맞는 항목이 없어서 빈칸으로 보인다 -- 실제로 그려지고 있는
+            # 기본 스타일을 대신 선택해서 보여준다.
+            "tray_icon_style": self._config.tray_icon_style if self._config.tray_icon_style in STYLES else DEFAULT_STYLE,
             "style_labels": i18n.tray_style_labels(self._config.language),
             "show_autostart": _IS_WINDOWS,
             "autostart_enabled": autostart.is_enabled() if _IS_WINDOWS else False,

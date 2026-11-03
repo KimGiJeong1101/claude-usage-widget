@@ -81,7 +81,7 @@ Usage popup only — fades the whole window (text included) to whatever transluc
 <td width="33%" valign="top">
 
 ### 🎨 5 tray icon styles
-Donut gauge / battery / bar / number / liquid fill — pick your favorite, switch anytime in Settings.
+Donut gauge / battery / bar / number / dual bars (session + weekly at once) — pick your favorite, switch anytime in Settings.
 
 </td>
 <td width="33%" valign="top">

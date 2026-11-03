@@ -129,10 +129,10 @@ function i18nText(lang, key) {
 // 하고, 이 파일의 다른 부분들과 마찬가지로 Python 쪽과 손으로 맞춰서
 // 동기화해줘야 한다.
 const I18N_TRAY_STYLE_LABELS = {
-  ko: { donut: "도넛 게이지", battery: "배터리", bar: "막대", big_number: "숫자", liquid: "원형 채움" },
-  en: { donut: "Donut gauge", battery: "Battery", bar: "Bar", big_number: "Number", liquid: "Liquid fill" },
-  ja: { donut: "ドーナツゲージ", battery: "バッテリー", bar: "バー", big_number: "数字", liquid: "円形フィル" },
-  "zh-CN": { donut: "环形量表", battery: "电池", bar: "条形", big_number: "数字", liquid: "圆形填充" },
+  ko: { donut: "도넛 게이지", battery: "배터리", bar: "막대", big_number: "숫자", dual_bar: "이중 막대 (세션+주간)" },
+  en: { donut: "Donut gauge", battery: "Battery", bar: "Bar", big_number: "Number", dual_bar: "Dual bars (session + weekly)" },
+  ja: { donut: "ドーナツゲージ", battery: "バッテリー", bar: "バー", big_number: "数字", dual_bar: "二本バー (セッション+週間)" },
+  "zh-CN": { donut: "环形量表", battery: "电池", bar: "条形", big_number: "数字", dual_bar: "双条形 (会话+每周)" },
 };
 
 function trayStyleLabel(lang, key) {

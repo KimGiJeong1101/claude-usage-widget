@@ -178,21 +178,21 @@ _STYLE_LABELS: Dict[str, Dict[str, str]] = {
         "battery": "Battery",
         "bar": "Bar",
         "big_number": "Number",
-        "liquid": "Liquid fill",
+        "dual_bar": "Dual bars (session + weekly)",
     },
     "ja": {
         "donut": "ドーナツゲージ",
         "battery": "バッテリー",
         "bar": "バー",
         "big_number": "数字",
-        "liquid": "円形フィル",
+        "dual_bar": "二本バー (セッション+週間)",
     },
     "zh-CN": {
         "donut": "环形量表",
         "battery": "电池",
         "bar": "条形",
         "big_number": "数字",
-        "liquid": "圆形填充",
+        "dual_bar": "双条形 (会话+每周)",
     },
 }
 

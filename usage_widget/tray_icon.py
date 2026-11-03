@@ -5,10 +5,11 @@
 걸 실제로 테스트해보고 확인했다. 그래서 스타일을 여러 개 만들어서(설정
 화면에서 고를 수 있음) 선택하게 했다 -- "정확한 숫자를 보여줄지" 아니면
 "한눈에 대충 얼마나 찼는지 느낌만 보여줄지" 사이에서 사람마다 선호가
-다르기 때문이다. 어떤 스타일이든 세션(5시간) 사용량 퍼센트만 보여준다 --
-세션 쪽이 주간 사용량보다 훨씬 자주 리셋되니까, 팝업을 열어보지 않고
-얼핏 봐도 될 만큼 자주 확인할 가치가 있는 숫자이기 때문이다. 주간
-사용량은 클릭 한 번이면 팝업에서 바로 볼 수 있다.
+다르기 때문이다. "이중 막대"를 뺀 나머지 스타일은 세션(5시간) 사용량
+퍼센트만 보여준다 -- 세션 쪽이 주간 사용량보다 훨씬 자주 리셋되니까,
+팝업을 열어보지 않고 얼핏 봐도 될 만큼 자주 확인할 가치가 있는 숫자이기
+때문이다. 주간 사용량까지 트레이에서 같이 보고 싶으면 "이중 막대"를
+고르면 되고, 그 외에는 클릭 한 번이면 팝업에서 바로 볼 수 있다.
 
 모든 스타일에 테두리(윤곽선, 아래 OUTLINE/OUTLINE_WIDTH 참고)를 둘렀는데,
 이건 작업표시줄/메뉴바의 배경색이 어떤 색이든 아이콘 모양이 잘 보이게
@@ -120,24 +121,35 @@ def _build_battery(session_percent: int, week_percent: int) -> Image.Image:
     return img
 
 
-def _build_liquid(session_percent: int, week_percent: int) -> Image.Image:
-    """물이 차오르는 것처럼, 원 안이 아래에서부터 위로 채워지는 모양."""
-    margin = 3
+def _build_dual_bar(session_percent: int, week_percent: int) -> Image.Image:
+    """세로 막대 두 개를 나란히 -- 왼쪽이 세션(5시간), 오른쪽이 주간. 다른
+    스타일들은 전부 세션 사용량만 보여주는데(이 파일 맨 위 설명 참고),
+    실제로는 주간 한도가 먼저 차서 막히는 경우도 많아서, 팝업을 안 열고도
+    둘 다 한눈에 보고 싶은 사람을 위한 스타일이다. 막대마다 자기 퍼센트에
+    맞는 색으로 따로 칠해져서, 어느 쪽이 위험한지도 바로 구분된다.
+
+    예전의 "원형 채움"(원 안이 아래부터 차오르는 모양) 스타일을 빼고 이걸
+    넣었다 -- 실제 트레이 크기(16px)로 그려보니 사용량이 낮을 땐 채워진
+    부분이 거의 안 보였고, 높을 땐 그냥 꽉 찬 원이라 도넛 게이지와 구분이
+    안 됐다."""
+    bar_width, gap, margin, radius = 24, 8, 4, 5
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    bbox = [margin, margin, SIZE - margin, SIZE - margin]
-    draw.ellipse(bbox, fill=TRACK)
 
-    clamped = min(max(session_percent, 0), 100)
-    fill_top = SIZE - margin - (SIZE - 2 * margin) * clamped / 100
+    top, bottom = margin, SIZE - margin
+    height = bottom - top
+    left_start = (SIZE - (bar_width * 2 + gap)) // 2
+    for i, percent in enumerate((session_percent, week_percent)):
+        left = left_start + i * (bar_width + gap)
+        right = left + bar_width
+        draw.rounded_rectangle([left, top, right, bottom], radius=radius, fill=TRACK, outline=OUTLINE, width=4)
+        clamped = min(max(percent, 0), 100)
+        fill_height = height * clamped / 100
+        if fill_height > 0:
+            draw.rounded_rectangle(
+                [left, bottom - fill_height, right, bottom], radius=radius, fill=color_for_percent(percent)
+            )
 
-    mask = Image.new("L", (SIZE, SIZE), 0)
-    ImageDraw.Draw(mask).ellipse(bbox, fill=255)
-    fill_layer = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    ImageDraw.Draw(fill_layer).rectangle([0, fill_top, SIZE, SIZE], fill=color_for_percent(session_percent))
-    img.paste(fill_layer, (0, 0), Image.composite(fill_layer, img, mask).split()[3])
-
-    draw.ellipse(bbox, outline=OUTLINE, width=6)
     return img
 
 
@@ -171,14 +183,17 @@ STYLES = {
     "battery": _build_battery,
     "bar": _build_bar,
     "big_number": _build_big_number,
-    "liquid": _build_liquid,
+    "dual_bar": _build_dual_bar,
 }
+# 예전에 "liquid"(원형 채움)를 골라뒀던 사람의 config.json에는 그 값이
+# 그대로 남아있지만, build_icon_image()가 모르는 스타일은 DEFAULT_STYLE로
+# 대신 그리기 때문에 에러 없이 도넛 게이지로 보이게 된다.
 STYLE_LABELS = {
     "donut": "도넛 게이지",
     "battery": "배터리",
     "bar": "막대",
     "big_number": "숫자",
-    "liquid": "원형 채움",
+    "dual_bar": "이중 막대 (세션+주간)",
 }
 DEFAULT_STYLE = "donut"
 
