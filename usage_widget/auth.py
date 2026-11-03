@@ -19,10 +19,17 @@ def _has_session_cookie(context) -> bool:
     return any(c["name"] == SESSION_COOKIE_NAME for c in context.cookies())
 
 
-def login_and_save_session() -> None:
+def login_and_save_session() -> bool:
     """진짜 브라우저 창을 하나 띄워서 사용자가 직접 claude.ai에 로그인하게
     하고, 로그인이 끝나면 그때 생긴 쿠키/localStorage를
-    session_state_path()가 가리키는 파일에 저장한다."""
+    session_state_path()가 가리키는 파일에 저장한다.
+
+    로그인이 끝나서 새 세션이 저장됐으면 True, 사용자가 로그인을 끝내지
+    않고 창을 닫아버렸으면 False를 돌려준다. "세션 파일이 있는지"만 보고는
+    이 둘을 구분할 수 없다 -- 세션이 만료돼서 불린 경우엔 낡은 세션 파일이
+    그대로 남아있기 때문이다. 이걸 구분 못 하면, 호출하는 쪽이 "창을
+    닫았다"를 "아직 로그인이 안 됐다"로 착각하고 로그인 창을 또 띄우게
+    된다."""
     # fetcher.py의 headless Chrome 실행과 같은 락을 쓴다 -- 세션이 만료돼서
     # 백그라운드 자동갱신 스레드가 재로그인 창을 띄우려는 바로 그 순간에
     # 사용자가 수동 새로고침(또는 계정 전환)을 눌러도, 이 락 때문에 로그인
@@ -44,7 +51,7 @@ def login_and_save_session() -> None:
             # 파일이 원래 없었는데 락을 기다리는 사이에 생겼다 -- 다른
             # 스레드가 방금 로그인을 끝냈다는 뜻이므로, 로그인 창을 또
             # 띄우지 않고 그냥 넘어간다.
-            return
+            return True
         with sync_playwright() as p:
             # Playwright에 기본으로 딸려오는 "Chrome for Testing" 브라우저가
             # 아니라, 사용자 컴퓨터에 실제로 설치돼있는 정품 Chrome을 띄운다.
@@ -70,7 +77,7 @@ def login_and_save_session() -> None:
                     while not _has_session_cookie(context):
                         time.sleep(1)
                 except Exception:
-                    return  # 로그인이 끝나기 전에 사용자가 브라우저 창을 닫아버린 경우
+                    return False  # 로그인이 끝나기 전에 사용자가 브라우저 창을 닫아버린 경우
 
                 # 로그인이 끝나면 Settings > Usage 화면이 아니라 다른 화면(예: 채팅
                 # 첫 화면)에 있을 수도 있으니, 여기서 다시 한번 명시적으로 이동한다.
@@ -81,6 +88,7 @@ def login_and_save_session() -> None:
                 page.goto(USAGE_URL)
 
                 context.storage_state(path=str(session_state_path()))
+                return True
             finally:
                 # try/finally로 감싸는 이유: 로그인 쿠키가 생긴 뒤에도(위 while
                 # 루프를 빠져나온 뒤에도) page.goto()나 storage_state() 저장이

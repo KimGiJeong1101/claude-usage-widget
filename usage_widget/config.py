@@ -3,7 +3,11 @@
 
 import json
 import os
+import tempfile
+import threading
+import time
 from dataclasses import asdict, dataclass, fields
+from typing import Callable
 
 from usage_widget.i18n import DEFAULT_LANGUAGE
 from usage_widget.paths import config_path
@@ -11,6 +15,17 @@ from usage_widget.tray_icon import DEFAULT_STYLE as DEFAULT_TRAY_ICON_STYLE
 
 DEFAULT_REFRESH_SECONDS = 60
 DEFAULT_USAGE_POPUP_OPACITY = 100
+
+# config.json을 읽고 쓰는 모든 작업(같은 프로세스 안의 여러 스레드)을 한 줄로
+# 세운다. os.replace의 원자성만으로는 부족했던 이유 두 가지:
+# 1. Windows에서는 다른 스레드가 config.json을 읽으려고 열어둔 바로 그
+#    순간에 os.replace로 그 파일을 바꿔치기하면 PermissionError가 난다
+#    (Config.load()는 트레이 메뉴를 그릴 때마다 불릴 정도로 자주 호출된다).
+# 2. "읽고 -> 한 필드만 고치고 -> 저장"하는 두 흐름(설정 팝업 저장과 투명도
+#    저장)이 겹치면, 나중에 저장한 쪽이 먼저 저장한 쪽의 변경을 모르고
+#    덮어쓴다. 이건 modify()가 읽기부터 저장까지를 이 락 하나로 묶어서 막는다.
+# RLock인 이유: modify()가 락을 잡은 채로 load()/save()를 다시 부르기 때문.
+_file_lock = threading.RLock()
 
 
 @dataclass
@@ -29,7 +44,9 @@ class Config:
         if not path.exists():
             return cls()
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            with _file_lock:
+                text = path.read_text(encoding="utf-8")
+            data = json.loads(text)
             # config.json은 "마지막으로 저장했던 버전이 무엇이든" 공유해서
             # 쓰는 파일이다. 그런데 예전 버전(예: language 필드가 아직
             # 없던 버전)이 최신 버전이 저장한 파일을 읽으면, 파이썬의
@@ -64,10 +81,48 @@ class Config:
         # 수준에서 원자적인 교체를 보장해서, 항상 "이전 내용 전체" 아니면
         # "새 내용 전체" 둘 중 하나만 보이게 된다 -- 둘이 섞인 중간 상태가
         # 보일 일이 없다.
+        #
+        # 임시 파일 이름은 매번 새로 만든다 -- 고정된 이름(config.json.tmp)
+        # 하나를 같이 쓰면, 다른 프로세스(예: 소스 실행과 exe가 동시에 떠
+        # 있는 개발 환경)가 같은 임시 파일에 동시에 쓰면서 내용이 섞일 수
+        # 있다. 같은 프로세스 안의 스레드끼리는 _file_lock이 막아준다.
         path = config_path()
-        tmp_path = path.with_suffix(path.suffix + ".tmp")
-        tmp_path.write_text(
-            json.dumps(asdict(self), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        os.replace(tmp_path, path)
+        content = json.dumps(asdict(self), ensure_ascii=False, indent=2)
+        with _file_lock:
+            fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(content)
+                _replace_with_retry(tmp_name, path)
+            except BaseException:
+                try:
+                    os.unlink(tmp_name)
+                except OSError:
+                    pass
+                raise
+
+    @classmethod
+    def modify(cls, mutate: Callable[["Config"], None]) -> "Config":
+        """최신 config.json을 읽어서 mutate(config)로 원하는 필드만 고치고
+        바로 저장한다 -- 읽기부터 저장까지 락 하나로 묶여 있어서, 다른
+        스레드가 그 사이에 저장한 값을 모르고 덮어쓰는 일이 없다."""
+        with _file_lock:
+            config = cls.load()
+            mutate(config)
+            config.save()
+            return config
+
+
+def _replace_with_retry(src: str, dst) -> None:
+    """Windows에서는 백신/검색 색인기 같은 다른 프로세스가 config.json을
+    잠깐 열어두고 있으면 os.replace가 PermissionError로 실패할 수 있다(같은
+    프로세스 안의 읽기는 _file_lock이 막아주지만, 다른 프로세스는 못 막는다).
+    이런 잠금은 보통 수십 밀리초 안에 풀리니, 몇 번만 다시 시도해본다."""
+    for attempt in range(5):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == 4:
+                raise
+            time.sleep(0.05 * (attempt + 1))

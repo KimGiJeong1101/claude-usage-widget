@@ -20,8 +20,8 @@ def test_save_then_load_roundtrip(tmp_path, monkeypatch):
     cfg.save()
 
     assert fake_path.exists()
-    tmp_file = fake_path.with_suffix(fake_path.suffix + ".tmp")
-    assert not tmp_file.exists(), "저장 후 임시 파일이 남아있다"
+    leftovers = [p.name for p in tmp_path.iterdir() if p.name.endswith(".tmp")]
+    assert not leftovers, f"저장 후 임시 파일이 남아있다: {leftovers}"
 
     loaded = config_mod.Config.load()
     assert loaded.refresh_seconds == 123
@@ -84,3 +84,43 @@ def test_settings_api_save_does_not_clobber_concurrently_saved_field(tmp_path, m
     final = config_mod.Config.load()
     assert final.usage_popup_opacity == 55, "다른 팝업이 저장한 값이 덮어써졌다"
     assert final.refresh_seconds == 999
+
+
+def test_concurrent_modify_never_loses_a_field_or_corrupts_the_file(tmp_path, monkeypatch):
+    """설정 팝업 저장과 투명도 저장처럼, 서로 다른 필드를 고치는 두 흐름이
+    동시에 여러 번 겹쳐도 (1) 어느 쪽의 마지막 값도 사라지지 않고 (2)
+    저장/읽기 중에 예외가 나지 않아야 한다. 예전에는 고정된 임시 파일 이름
+    하나를 같이 쓰고 읽기~저장 사이에 락이 없어서, 값이 사라지거나 Windows
+    에서 os.replace가 PermissionError로 실패할 수 있었다."""
+    import threading
+
+    fake_path = tmp_path / "config.json"
+    monkeypatch.setattr(config_mod, "config_path", lambda: fake_path)
+    config_mod.Config().save()
+
+    errors = []
+
+    def worker(field, values):
+        try:
+            for value in values:
+                def mutate(cfg, value=value):
+                    setattr(cfg, field, value)
+
+                config_mod.Config.modify(mutate)
+                config_mod.Config.load()  # 트레이 메뉴처럼 중간중간 읽기도 섞어줌
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=worker, args=("refresh_seconds", list(range(100, 150)))),
+        threading.Thread(target=worker, args=("usage_popup_opacity", list(range(40, 90)))),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"동시 저장 중 예외 발생: {errors}"
+    final = config_mod.Config.load()
+    assert final.refresh_seconds == 149, "다른 스레드의 저장이 refresh_seconds 변경을 덮어썼다"
+    assert final.usage_popup_opacity == 89, "다른 스레드의 저장이 투명도 변경을 덮어썼다"

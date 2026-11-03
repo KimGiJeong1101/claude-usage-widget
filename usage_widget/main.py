@@ -24,11 +24,11 @@ pywebview는 webview.start()(메인 스레드에서 실행해야 함)를 부르�
 import threading
 import time
 import webbrowser
-from typing import Optional
+from typing import Callable, Optional
 
 import pystray
 
-from usage_widget import __version__, i18n, single_instance
+from usage_widget import __version__, autostart, i18n, single_instance
 from usage_widget.auth import has_saved_session, login_and_save_session
 from usage_widget.config import DEFAULT_REFRESH_SECONDS, Config
 from usage_widget.fetcher import SessionExpiredError, UsageData, browser_launch_lock, fetch_account_email, fetch_usage
@@ -57,9 +57,21 @@ _update_notified_versions: set = set()
 _latest_usage = None
 _last_error = None
 _account_email = None
+_last_email_attempt = 0.0
+_EMAIL_RETRY_SECONDS = 10 * 60
 _logged_out = False  # 사용자가 명시적으로 "로그아웃"을 눌렀으면 True가 됨:
 # 그 이후로는 "계정 변경"을 누르기 전까지, 사용량을 다시 가져오려는 시도도
-# 자동 재로그인 시도도 완전히 멈춘 채로 있는다.
+# 자동 재로그인 시도도 완전히 멈춘 채로 있는다. 사용자가 재로그인 창을
+# 그냥 닫아버린 경우와, 계정 전환이 진행 중인 동안에도 똑같이 True로 둔다.
+
+# _refresh_loop의 대기(sleep)를 중간에 깨우는 용도 -- 설정에서 갱신 주기를
+# 바꿨을 때, 예전 주기만큼의 대기가 다 끝날 때까지 기다리지 않고 바로 새
+# 주기가 반영되게 한다.
+_refresh_wakeup = threading.Event()
+
+
+class _LoginCancelledError(Exception):
+    """재로그인 창이 떴는데 사용자가 로그인을 끝내지 않고 창을 닫아버렸을 때."""
 
 
 def _update_icon(icon: pystray.Icon) -> None:
@@ -81,19 +93,36 @@ def _update_icon(icon: pystray.Icon) -> None:
     icon.title = label if _last_error is None else f"{label} ({i18n.t('tray.tooltip_error', lang)})"
 
 
-def _fetch_with_relogin():
+def _fetch_with_relogin(before_login: Optional[Callable[[], None]] = None):
     """사용량을 가져오다가 로그인이 만료된 걸 발견하면 재로그인을 시도하고,
     그래도 안 되면 fetch_usage()가 던지는 예외를 그대로 다시 던진다 -- 이걸
     호출하는 쪽에서 이 예외를 알아서 잡아야 한다. 한 번 가져오다 실패한
     것(네트워크가 잠깐 끊기거나, 재로그인 창을 사용자가 그냥 닫거나,
     claude.ai가 API 형식을 바꾸는 등) 때문에 백그라운드 갱신 스레드가
-    조용히 죽어버리거나 팝업이 먹통이 되면 안 되기 때문이다."""
+    조용히 죽어버리거나 팝업이 먹통이 되면 안 되기 때문이다.
+
+    사용자가 재로그인 창을 닫아버리면 _LoginCancelledError를 던진다 -- 이걸
+    받은 쪽은 로그인 창을 또 띄우지 말고 일시정지(_logged_out) 상태로
+    넘어가야 한다. 안 그러면 갱신 주기마다 Chrome 창이 계속 다시 뜬다.
+
+    before_login은 있는 경우, 로그인 창을 실제로 띄우기 직전에 한 번
+    불린다 (예: 시작할 때 떠 있는 스플래시가 로그인 창을 가리지 않게
+    먼저 닫기)."""
     try:
         return fetch_usage()
     except SessionExpiredError:
-        login_and_save_session()
-        if not has_saved_session():
-            raise  # 사용자가 로그인을 끝내지 않고 로그인 창을 그냥 닫아버린 경우
+        if _logged_out:
+            # 로그아웃(또는 계정 전환)이 진행되는 도중에 이 갱신이 겹친
+            # 경우다 -- 사용자가 방금 스스로 로그아웃했는데 로그인 창이
+            # 불쑥 뜨면 안 된다.
+            raise
+        if before_login is not None:
+            before_login()
+        if not login_and_save_session():
+            raise _LoginCancelledError("login window closed before signing in")
+        # 재로그인할 때 예전과 다른 계정으로 로그인했을 수도 있으니,
+        # 계정 팝업에 보여줄 이메일도 같이 새로 가져온다.
+        _refresh_account_email()
         return fetch_usage()
 
 
@@ -101,15 +130,26 @@ def _refresh_account_email() -> None:
     """되면 좋고 안 돼도 그만인 작업이다 -- 이메일 주소는 "계정" 팝업에서만
     보여주는 정보라서, 여기서 실패해도 사용량을 가져오는 것 자체에는 전혀
     영향을 주면 안 된다."""
-    global _account_email
+    global _account_email, _last_email_attempt
+    _last_email_attempt = time.monotonic()
     try:
         _account_email = fetch_account_email()
     except Exception:
         _account_email = None
 
 
+def _retry_account_email_if_missing() -> None:
+    """시작할 때 이메일 조회가 한 번 실패하면(네트워크가 잠깐 끊김 등),
+    예전에는 다시 시도하는 곳이 없어서 계정 팝업에 "확인 중..."이 영원히
+    떠 있었다. 사용량 조회에 성공한(= 세션은 멀쩡한) 시점에 이메일이 아직
+    없으면 다시 시도하되, headless Chrome을 매 주기마다 한 번씩 더 띄우는
+    일이 없도록 시도 간격을 둔다."""
+    if _account_email is None and time.monotonic() - _last_email_attempt >= _EMAIL_RETRY_SECONDS:
+        _refresh_account_email()
+
+
 def _refresh_loop(icon: pystray.Icon) -> None:
-    global _latest_usage, _last_error
+    global _latest_usage, _last_error, _logged_out
     while True:
         try:
             config = Config.load()
@@ -118,13 +158,23 @@ def _refresh_loop(icon: pystray.Icon) -> None:
                     _latest_usage = _fetch_with_relogin()
                     _last_error = None
                     push_usage_update(_latest_usage)
+                    _retry_account_email_if_missing()
+                except _LoginCancelledError as exc:
+                    # 사용자가 재로그인 창을 닫았다 = 지금은 로그인할 생각이
+                    # 없다는 뜻이다. 다음 주기에 또 로그인 창을 띄우지 않고,
+                    # "로그아웃"을 눌렀을 때와 같은 일시정지 상태로 넘어간다
+                    # (트레이 아이콘이 회색이 되고, 트레이 "계정" 메뉴에서
+                    # 다시 로그인할 수 있다).
+                    _last_error = str(exc)
+                    _logged_out = True
                 except Exception as exc:
                     _last_error = str(exc)
                 _update_icon(icon)
             interval = config.refresh_seconds
             if not isinstance(interval, (int, float)) or interval <= 0:
                 interval = DEFAULT_REFRESH_SECONDS
-            time.sleep(interval)
+            _refresh_wakeup.wait(interval)
+            _refresh_wakeup.clear()
         except Exception:
             # config.json 안에 이 버전이 예상하지 못한 값이 들어있을 수도
             # 있다(예: 누가 직접 손으로 고치다가 refresh_seconds를 이상한
@@ -141,14 +191,25 @@ def _manual_refresh(icon: pystray.Icon) -> Optional[UsageData]:
     """사용량을 새로 가져와서 돌려준다 (실패하면 None). 여기서 시간이 걸려도
     괜찮다: pywebview는 이런 js_api 호출을 화면을 그리는 스레드가 아니라
     이미 별도 스레드에서 처리해주기 때문에, 여기서 오래 걸려도 팝업 화면이
-    멈추지 않는다."""
-    global _latest_usage, _last_error
+    멈추지 않는다.
+
+    로그아웃 상태에서는 아무것도 안 하고 None을 돌려준다 -- 고정해둔 사용량
+    팝업이 로그아웃 뒤에도 열려있을 수 있는데, 거기서 새로고침을 누른다고
+    로그인 창이 뜨면 안 된다(다시 로그인하는 정식 경로는 "계정" 메뉴다)."""
+    global _latest_usage, _last_error, _logged_out
+    if _logged_out:
+        return None
     try:
         _latest_usage = _fetch_with_relogin()
         _last_error = None
         _update_icon(icon)
         push_usage_update(_latest_usage)
         return _latest_usage
+    except _LoginCancelledError as exc:
+        _last_error = str(exc)
+        _logged_out = True
+        _update_icon(icon)
+        return None
     except Exception as exc:
         _last_error = str(exc)
         _update_icon(icon)
@@ -161,11 +222,16 @@ def _do_logout(icon: pystray.Icon) -> None:
     (storage_state로) Chrome 요청을 보내는 도중에 파일이 사라져버려서,
     "세션이 만료됐다"는 정상적인 에러 대신 알아보기 힘든 에러가 나는
     경우가 생길 수 있다. 이 락 덕분에 파일 삭제는 항상 진행 중이던
-    요청이 끝난 뒤에만 일어난다."""
+    요청이 끝난 뒤에만 일어난다.
+
+    _logged_out은 파일을 지우기 *전에* 먼저 켠다 -- 순서가 반대면, 파일은
+    이미 지워졌는데 플래그는 아직 False인 짧은 틈에 백그라운드 갱신이
+    끼어들어서 "세션 없음 = 재로그인 필요"로 판단하고, 방금 로그아웃한
+    사용자 앞에 로그인 창을 띄울 수 있다."""
     global _logged_out, _account_email
+    _logged_out = True
     with browser_launch_lock:
         session_state_path().unlink(missing_ok=True)
-    _logged_out = True
     _account_email = None
     _update_icon(icon)
 
@@ -178,14 +244,27 @@ def _do_switch_account(icon: pystray.Icon) -> None:
     부르면 그동안 pystray의 메시지 루프 전체가 멈춰버린다."""
 
     def worker():
-        global _latest_usage, _last_error, _logged_out
+        global _latest_usage, _last_error, _logged_out, _account_email
+        # 계정 전환이 진행되는 동안에는 백그라운드 갱신 루프를 일시정지
+        # 상태로 둔다 -- 안 그러면 세션 파일이 지워진 걸 본 갱신 루프도
+        # "재로그인 필요"로 판단해서 자기 로그인 창을 띄우려고 락 뒤에서
+        # 기다리게 되고, 사용자가 이 로그인 창을 닫자마자 그쪽 창이 또
+        # 뜬다. 로그인에 성공했을 때만 아래에서 다시 False로 푼다.
+        _logged_out = True
         # _do_logout과 같은 이유로, 삭제 자체도 락으로 감싼다(_do_logout의
         # 독스트링 참고).
         with browser_launch_lock:
             session_state_path().unlink(missing_ok=True)
+        _account_email = None
         try:
-            login_and_save_session()
-            _latest_usage = _fetch_with_relogin()
+            if not login_and_save_session():
+                # 사용자가 로그인 창을 닫았다 -- 여기서 _fetch_with_relogin()
+                # 같은 걸 부르면 "세션 없음"을 보고 로그인 창을 한 번 더
+                # 띄우게 되니, 그냥 로그아웃(일시정지) 상태로 끝낸다.
+                _update_icon(icon)
+                return
+            # 방금 로그인을 끝냈으니 재로그인 로직 없이 바로 가져온다.
+            _latest_usage = fetch_usage()
             _last_error = None
             _logged_out = False
             push_usage_update(_latest_usage)
@@ -227,6 +306,10 @@ def _on_settings(icon: pystray.Icon, item) -> None:
         # 그래서 icon.update_menu()를 여기서 직접 한 번 더 불러줘야, 설정에서
         # 언어를 바꿨을 때 "안 바뀐 것처럼 보이는" 문제가 안 생긴다.
         icon.update_menu()
+        # 갱신 주기를 바꿨다면, 예전 주기로 걸어둔 대기가 끝날 때까지
+        # 기다리지 않고 바로 새 주기로 다시 시작하게 한다(예: 3600초에서
+        # 60초로 바꿨는데 최대 1시간 동안 반영이 안 되는 문제).
+        _refresh_wakeup.set()
 
     threading.Thread(target=lambda: show_settings_popup(on_saved=on_saved), daemon=True).start()
 
@@ -364,24 +447,36 @@ def _update_check_loop(icon: pystray.Icon) -> None:
     아무 상관이 없기 때문에, 일부러 그 값을 같이 쓰지 않는다."""
     global _update_available_version
     while True:
-        version = check_for_update()
-        _update_available_version = version
-        if version is not None and version not in _update_notified_versions:
-            _update_notified_versions.add(version)
-            lang = Config.load().language
-            action = (
-                i18n.t("notify.new_version_action_self", lang)
-                if can_self_update()
-                else i18n.t("notify.new_version_action_download", lang)
-            )
-            try:
-                icon.notify(
-                    i18n.t("notify.new_version_available_msg", lang, version=version, action=action),
-                    i18n.t("notify.new_version_available_title", lang),
+        try:
+            version = check_for_update()
+            # check_for_update()는 "최신 버전임"과 "확인 자체가 실패함(네트워크
+            # 끊김 등)"을 둘 다 None으로 돌려준다. 그래서 None일 때 그대로
+            # 덮어쓰면, 이미 찾아둔 새 버전 정보가 확인에 한 번 실패한 것만으로
+            # 사라져서 메뉴가 "현재 버전"으로 되돌아가 버린다. 실행 중에 이미
+            # 알게 된 새 버전이 다시 "없던 일"이 될 수는 없으니, 새 버전을
+            # 찾았을 때만 갱신한다.
+            if version is not None:
+                _update_available_version = version
+            if version is not None and version not in _update_notified_versions:
+                _update_notified_versions.add(version)
+                lang = Config.load().language
+                action = (
+                    i18n.t("notify.new_version_action_self", lang)
+                    if can_self_update()
+                    else i18n.t("notify.new_version_action_download", lang)
                 )
-            except Exception:
-                pass
-        icon.update_menu()
+                try:
+                    icon.notify(
+                        i18n.t("notify.new_version_available_msg", lang, version=version, action=action),
+                        i18n.t("notify.new_version_available_title", lang),
+                    )
+                except Exception:
+                    pass
+            icon.update_menu()
+        except Exception:
+            # _refresh_loop와 같은 이유 -- 여기서 예외 하나 때문에 이 데몬
+            # 스레드가 조용히 죽으면, 그 뒤로는 업데이트 확인이 영영 안 돈다.
+            pass
         time.sleep(_UPDATE_CHECK_INTERVAL_SECONDS)
 
 
@@ -507,22 +602,41 @@ def run() -> None:
         _notify_already_running()
         return
     cleanup_stale_update_files()
+    autostart.refresh_registered_path()
 
     init_gui()
     lang = Config.load().language
     splash = show_splash(lang)
 
     def bootstrap():
-        global _latest_usage
+        global _latest_usage, _logged_out, _last_error
         try:
-            if not has_saved_session():
-                # 이제 곧 로그인을 위한 진짜 Chrome 브라우저 창이 통째로
-                # 뜰 예정이다 -- 그 밑에 작은 스플래시 화면이 계속 남아있을
-                # 이유가 없으니 먼저 닫는다.
-                close_splash(splash)
-                login_and_save_session()
-            _latest_usage = _fetch_with_relogin()
-            _refresh_account_email()
+            try:
+                if not has_saved_session():
+                    # 이제 곧 로그인을 위한 진짜 Chrome 브라우저 창이 통째로
+                    # 뜰 예정이다 -- 그 밑에 작은 스플래시 화면이 계속 남아있을
+                    # 이유가 없으니 먼저 닫는다.
+                    close_splash(splash)
+                    if not login_and_save_session():
+                        raise _LoginCancelledError("login window closed before signing in")
+                    # 방금 로그인을 끝냈으니 재로그인 로직 없이 바로 가져온다
+                    # -- _fetch_with_relogin()을 쓰면, 혹시 여기서 실패했을 때
+                    # 로그인 창이 곧바로 한 번 더 뜬다.
+                    _latest_usage = fetch_usage()
+                else:
+                    # 세션 파일은 있는데 만료된 경우에도 재로그인 창이 뜬다.
+                    # 스플래시는 항상 위(on_top)에 화면 정중앙에 떠 있어서,
+                    # 그대로 두면 로그인 화면 한가운데를 가려버린다 -- 로그인
+                    # 창을 띄우기 직전에 닫는다.
+                    _latest_usage = _fetch_with_relogin(before_login=lambda: close_splash(splash))
+                _refresh_account_email()
+            except _LoginCancelledError as exc:
+                # 사용자가 로그인 창을 닫았다. 예전에는 이걸 "실행 실패"로
+                # 보고 에러 메시지와 함께 앱을 종료했는데, 사용자가 스스로
+                # 닫은 것이니 실패가 아니다 -- 대신 로그아웃(일시정지) 상태로
+                # 트레이에 띄워두고, 원할 때 "계정" 메뉴에서 로그인하게 한다.
+                _logged_out = True
+                _last_error = str(exc)
         except Exception as exc:
             close_splash(splash)
             # 메시지 박스를 shutdown_gui()보다 반드시 먼저 불러야 한다 --
@@ -537,12 +651,13 @@ def run() -> None:
 
         icon = pystray.Icon(
             "claude-usage-widget",
-            build_icon_image(
-                _latest_usage.session_percent, _latest_usage.week_percent, style=Config.load().tray_icon_style
-            ),
+            build_icon_image(0, 0, style=Config.load().tray_icon_style, logged_out=True),
             i18n.t("tray.tooltip_base", Config.load().language),
             _build_menu(),
         )
+        # 실제 아이콘 이미지/툴팁은 로그아웃 상태까지 고려하는 _update_icon에
+        # 맡긴다 (로그인 창을 닫고 시작한 경우엔 _latest_usage가 없다).
+        _update_icon(icon)
         _run_tray(icon)
 
     threading.Thread(target=bootstrap, daemon=True).start()

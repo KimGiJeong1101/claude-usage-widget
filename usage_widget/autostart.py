@@ -53,6 +53,29 @@ def enable() -> None:
         winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, _command())
 
 
+def refresh_registered_path() -> None:
+    """자동 시작이 켜져 있으면, 등록된 실행 경로를 지금 실행 중인 exe의
+    경로로 다시 맞춰준다. 포터블 버전은 사용자가 exe를 다른 폴더로 옮길 수
+    있는데, 그러면 레지스트리에는 옛날 경로가 남아서 설정 화면의 체크박스는
+    켜져 있는데 실제로는 PC를 켜도 아무것도 실행되지 않았다.
+
+    배포용 exe로 실행 중일 때만 한다 -- 소스로 실행 중일 때 이걸 하면,
+    개발자 PC에서 exe용으로 켜둔 자동 시작이 "python -m ..." 명령으로
+    슬쩍 바뀌어버린다. "되면 좋고 안 돼도 그만"인 작업이라 실패는 무시한다."""
+    if not _IS_WINDOWS or not getattr(sys, "frozen", False):
+        return
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY_PATH) as key:
+            current, _ = winreg.QueryValueEx(key, APP_NAME)
+    except OSError:
+        return  # 자동 시작이 꺼져 있음
+    if current != _command():
+        try:
+            enable()
+        except OSError:
+            pass
+
+
 def disable() -> None:
     if not _IS_WINDOWS:
         return

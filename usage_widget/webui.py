@@ -617,9 +617,11 @@ class _UsageApi:
         except (TypeError, ValueError):
             return
         self._opacity_fn(percent)
-        config = Config.load()
-        config.usage_popup_opacity = percent
-        config.save()
+
+        def mutate(config: Config) -> None:
+            config.usage_popup_opacity = percent
+
+        Config.modify(mutate)
 
 
 _singleton_windows: dict = {}
@@ -763,18 +765,19 @@ class _SettingsApi:
         # 조용히 덮어써서 없애버리게 된다(코드 점검 중 발견한, 실제로
         # 일어날 수 있는 값 유실 버그). 그래서 저장 직전에 파일에서 최신
         # 값을 다시 읽어와서, 이 팝업이 담당하는 필드만 바꾸고 나머지는
-        # 그대로 둔다.
-        config = Config.load()
-        try:
-            config.refresh_seconds = max(5, int(payload.get("refresh_seconds", config.refresh_seconds)))
-        except (TypeError, ValueError):
-            pass
-        config.tray_icon_style = payload.get("tray_icon_style") or DEFAULT_STYLE
-        language = payload.get("language")
-        if language in i18n.LANGUAGE_NAMES:
-            config.language = language
-        config.save()
-        self._config = config
+        # 그대로 둔다. Config.modify()가 이 읽기~저장 전체를 락으로 묶어서,
+        # 바로 그 순간에 투명도 저장이 겹쳐도 어느 한쪽 값이 사라지지 않는다.
+        def mutate(config: Config) -> None:
+            try:
+                config.refresh_seconds = max(5, int(payload.get("refresh_seconds", config.refresh_seconds)))
+            except (TypeError, ValueError):
+                pass
+            config.tray_icon_style = payload.get("tray_icon_style") or DEFAULT_STYLE
+            language = payload.get("language")
+            if language in i18n.LANGUAGE_NAMES:
+                config.language = language
+
+        self._config = Config.modify(mutate)
         if _IS_WINDOWS:
             if payload.get("autostart"):
                 autostart.enable()

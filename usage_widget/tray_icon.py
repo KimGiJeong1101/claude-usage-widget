@@ -152,7 +152,11 @@ def _build_big_number(session_percent: int, week_percent: int) -> Image.Image:
     color = color_for_percent(session_percent)
     draw.rounded_rectangle([margin, margin, SIZE - margin, SIZE - margin], radius=16, fill=color, outline=OUTLINE, width=3)
 
-    text = str(min(max(session_percent, 0), 99))
+    # 세 자리("100")는 이 크기에 안 들어가서 두 자리까지만 숫자로 그린다.
+    # 예전에는 100%도 그냥 "99"로 잘라서 보여줬는데, 그러면 "아직 1% 남았다"로
+    # 오해할 수 있다 -- 한도에 다 찼다는 건 숫자 대신 "!"로 확실히 구분한다.
+    clamped = min(max(session_percent, 0), 100)
+    text = "!" if clamped >= 100 else str(clamped)
     font = ImageFont.truetype(str(_FONT_PATH), 34)
     bbox = draw.textbbox((0, 0), text, font=font)
     text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]

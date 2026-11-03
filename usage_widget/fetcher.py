@@ -48,6 +48,23 @@ class SessionExpiredError(Exception):
     발생시키는(raise) 예외."""
 
 
+# 이 상태 코드일 때만 "세션이 만료됐다"(= 다시 로그인해야 한다)고 판단한다.
+# 예전에는 200이 아닌 응답을 전부 세션 만료로 취급했는데, 그러면 claude.ai
+# 서버가 잠깐 장애(5xx)가 나거나 요청 횟수 제한(429)에 걸리기만 해도 멀쩡한
+# 세션을 두고 Chrome 로그인 창이 불쑥 떠버렸다. 그런 일시적인 오류는 그냥
+# "이번 갱신 실패"로 처리하고 다음 주기에 다시 시도하면 된다.
+_SESSION_EXPIRED_STATUSES = (401, 403)
+
+
+def _check_status(response, what: str) -> None:
+    if response.status == 200:
+        return
+    message = f"{what} returned {response.status}"
+    if response.status in _SESSION_EXPIRED_STATUSES:
+        raise SessionExpiredError(message)
+    raise RuntimeError(message)
+
+
 @dataclass
 class UsageData:
     session_percent: int
@@ -81,10 +98,7 @@ def fetch_usage() -> UsageData:
             context = browser.new_context(storage_state=str(session_state_path()))
 
             orgs_response = context.request.get(API_BASE)
-            if orgs_response.status != 200:
-                raise SessionExpiredError(
-                    f"organizations list returned {orgs_response.status}"
-                )
+            _check_status(orgs_response, "organizations list")
             organizations = orgs_response.json()
             if not organizations:
                 raise SessionExpiredError("no organizations returned for this account")
@@ -101,19 +115,22 @@ def fetch_usage() -> UsageData:
             org_id = organizations[0]["uuid"]
 
             usage_response = context.request.get(f"{API_BASE}/{org_id}/usage")
-            if usage_response.status != 200:
-                raise SessionExpiredError(
-                    f"usage endpoint returned {usage_response.status}"
-                )
+            _check_status(usage_response, "usage endpoint")
             data = usage_response.json()
         finally:
             browser.close()
 
+    # resets_at이 null로 오는 경우(섹션 11.1)와 같은 이유로, 구간 자체
+    # ("five_hour"/"seven_day")나 utilization 값이 통째로 null로 올 수도
+    # 있다고 보고 방어한다 -- 이걸 안 하면 TypeError가 나는데, 하필 시작
+    # 시점의 첫 조회에서 나면 앱이 아예 실행되지 않는다.
+    five_hour = data.get("five_hour") or {}
+    seven_day = data.get("seven_day") or {}
     return UsageData(
-        session_percent=round(data["five_hour"]["utilization"]),
-        week_percent=round(data["seven_day"]["utilization"]),
-        session_reset_at=_parse_reset_at(data["five_hour"]["resets_at"]),
-        week_reset_at=_parse_reset_at(data["seven_day"]["resets_at"]),
+        session_percent=round(five_hour.get("utilization") or 0),
+        week_percent=round(seven_day.get("utilization") or 0),
+        session_reset_at=_parse_reset_at(five_hour.get("resets_at")),
+        week_reset_at=_parse_reset_at(seven_day.get("resets_at")),
     )
 
 
@@ -132,8 +149,7 @@ def fetch_account_email() -> str:
         try:
             context = browser.new_context(storage_state=str(session_state_path()))
             response = context.request.get(BOOTSTRAP_ENDPOINT)
-            if response.status != 200:
-                raise SessionExpiredError(f"bootstrap endpoint returned {response.status}")
+            _check_status(response, "bootstrap endpoint")
             data = response.json()
         finally:
             browser.close()
