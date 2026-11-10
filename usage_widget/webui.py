@@ -563,11 +563,13 @@ def _usage_to_dict(usage: UsageData, lang: str) -> dict:
     }
 
 
-# 사용량 팝업은 한도 개수만큼 줄을 쌓아서 그리기 때문에, 창 높이도 그
-# 개수에 맞춰 정한다. 이 값들은 usage.html의 실제 렌더링 결과(헤더 + 줄
-# 하나의 높이 + 줄 사이 간격)를 Playwright로 그려서 잰 값이다 -- usage.html의
-# 줄 레이아웃(.limit-row 패딩/글자 크기 등)을 바꾸면 같이 맞춰야 한다.
-_USAGE_POPUP_BASE_HEIGHT = 92  # 실측 89px(헤더 71 + 위아래 여백 24 - 간격 하나 8 + 테두리 2) + 여유 3px
+# 사용량 팝업은 한도 개수만큼 줄을 쌓아서 그리기 때문에, 창을 처음 만들
+# 때의 높이도 그 개수에 맞춰 짐작한다. 이 값들은 usage.html을 Playwright로
+# 그려서 잰 값이다(헤더 + 줄 하나의 높이 + 줄 사이 간격). 다만 실제 창은 화면
+# 배율(DPI)에 따라 몇 px씩 어긋나게 뜰 수 있어서, 최종 높이는 창이 뜬 뒤
+# usage.html의 fitWindowToContent()가 실제 내용 높이를 재서 맞춘다 -- 여기
+# 값은 "처음 뜰 때 크게 움찔거리지 않을 만큼 가까운 출발점"이면 충분하다.
+_USAGE_POPUP_BASE_HEIGHT = 91  # 실측: 헤더 71 + 위아래 여백 26 - 간격 하나 8 + 테두리 2
 _USAGE_POPUP_ROW_HEIGHT = 79  # 실측: 줄 하나 71px + 줄 사이 간격 8px
 
 
@@ -608,23 +610,6 @@ class _UsageApi:
         self._opacity = opacity
         self._opacity_fn = opacity_fn
         self._lang = lang
-        self._row_count = max(len(usage.limits), 1)
-
-    def fit_rows(self, row_count: int) -> None:
-        """새로 받은 데이터의 한도 개수가 창을 처음 만들 때와 달라졌으면(예:
-        모델 전용 한도가 새로 생기거나 사라짐), 그 차이만큼 창 높이를
-        늘리거나 줄인다. 투명도 스트립 토글과 같은 이유로 세로 전용
-        리사이즈(_box_vertical_resizer)를 써서, 작업표시줄 쪽 경계는 그대로
-        둔 채 크기가 바뀐다."""
-        try:
-            row_count = max(int(row_count), 1)
-        except (TypeError, ValueError):
-            return
-        if row_count == self._row_count:
-            return
-        delta = _usage_popup_height(row_count) - _usage_popup_height(self._row_count)
-        self._row_count = row_count
-        self._vertical_resize_fn(delta)
 
     def get_initial_data(self) -> dict:
         return {**_usage_to_dict(self._usage, self._lang), "opacity": self._opacity, "language": self._lang}

@@ -12,7 +12,7 @@
      줄의 패딩/글자 크기를 바꾸면 _USAGE_POPUP_ROW_HEIGHT도 같이 맞춰야 한다.
      flex: 1 0 auto -- 리사이즈 손잡이로 창을 키우면 줄들이 남는 공간을 나눠
      가지며 늘어나서, 아래쪽에 빈 공간만 덩그러니 남지 않는다. */
-  .body { gap: 8px; padding-top: 8px; padding-bottom: 16px; }
+  .body { gap: 8px; padding-top: 8px; padding-bottom: 18px; }
   .limit-row {
     flex: 1 0 auto;
     display: flex;
@@ -186,7 +186,7 @@
     // 애니메이션이 자동 갱신 때마다 반복되지 않고 바뀐 만큼만 움직인다.
     if (limitsEl.children.length !== limits.length) {
       limitsEl.replaceChildren(...limits.map(buildRow));
-      window.pywebview.api.fit_rows(limits.length);
+      requestAnimationFrame(fitWindowToContent);
       animate = true;
     }
     currentLimits = limits;
@@ -220,6 +220,33 @@
   }
 
   setInterval(paintResetTexts, 30000);
+
+  // 창 높이를 지금 내용(줄 개수)에 꼭 맞게 늘이거나 줄인다. Python 쪽은 창을
+  // 만들 때 "줄 높이 × 개수"로 높이를 미리 짐작해서 열지만(webui.py의
+  // _usage_popup_height), 실제 창 크기는 화면 배율(DPI)에 따라 WinForms 테두리
+  // 보정값(_WINFORMS_SIZE_FUDGE)이 조금씩 어긋나서 몇 px씩 모자라게 뜰 수
+  // 있었다 -- 그러면 마지막 카드가 창 아래쪽에 딱 붙어 보였다. 그래서 창이
+  // 뜬 뒤에 실제로 그려진 내용 높이를 직접 재서 그 차이만큼만 맞춘다. 화면
+  // 배율과 상관없이 아래 여백이 항상 CSS에 적힌 그대로 유지된다.
+  //
+  // 처음 열 때와 한도 개수가 바뀔 때만 부른다 -- 자동 갱신 때마다 부르면,
+  // 사용자가 리사이즈 손잡이로 일부러 키워둔 창을 매번 원래 크기로 되돌려버린다.
+  function fitWindowToContent() {
+    const rows = [...limitsEl.children];
+    // 줄들은 평소 남는 공간을 나눠 가지며 늘어나므로(flex-grow), "원래 필요한
+    // 높이"를 재는 순간에만 늘어나지 않게 잠깐 막는다. 같은 동기 코드 안에서
+    // 되돌리기 때문에 화면에 깜빡이며 그려지는 일은 없다.
+    if (!rows.length) return;
+    rows.forEach((r) => (r.style.flexGrow = "0"));
+    const overflow = limitsEl.scrollHeight - limitsEl.clientHeight;
+    const lastBottom = rows[rows.length - 1].getBoundingClientRect().bottom;
+    const contentBottom = limitsEl.getBoundingClientRect().bottom - parseFloat(getComputedStyle(limitsEl).paddingBottom);
+    const spare = contentBottom - lastBottom;
+    rows.forEach((r) => (r.style.flexGrow = ""));
+    // 내용이 넘치면(overflow > 0) 그만큼 키우고, 남으면(spare > 0) 그만큼 줄인다.
+    const delta = overflow > 0 ? overflow : -Math.floor(spare);
+    if (Math.abs(delta) >= 2) window.pywebview.api.resize_height_by(delta);
+  }
 
   let pinned = false;
   const pinBtn = document.getElementById("btn-pin");
