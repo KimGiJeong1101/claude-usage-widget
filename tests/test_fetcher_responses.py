@@ -85,5 +85,37 @@ def test_null_usage_windows_do_not_crash(tmp_path, monkeypatch):
     usage = fetcher.fetch_usage()
     assert usage.session_percent == 0
     assert usage.week_percent == 0
-    assert usage.session_reset_at is None
-    assert usage.week_reset_at is None
+    assert [(l.kind, l.percent, l.resets_at) for l in usage.limits] == [("session", 0, None), ("weekly_all", 0, None)]
+
+
+def test_limits_list_is_read_as_is_including_model_scoped_limits(tmp_path, monkeypatch):
+    """claude.ai는 "limits" 목록에 계정별로 한도를 몇 개든 담아준다 (2026-11-10
+    실제 응답 기준: 세션 / 주간 전체 / 특정 모델(Fable) 전용 주간). 고정된
+    두 개만 읽던 예전 방식으로는 모델 전용 한도가 안 보였다."""
+    payload = {
+        "five_hour": {"utilization": 4.0, "resets_at": "2026-11-10T16:39:59.654542+00:00"},
+        "seven_day": {"utilization": 25.0, "resets_at": "2026-11-15T15:59:59.654563+00:00"},
+        "limits": [
+            {"kind": "session", "percent": 4, "resets_at": "2026-11-10T16:39:59.654542+00:00", "scope": None, "is_active": False},
+            {"kind": "weekly_all", "percent": 25, "resets_at": "2026-11-15T15:59:59.654563+00:00", "scope": None, "is_active": True},
+            {
+                "kind": "weekly_scoped",
+                "percent": 9,
+                "resets_at": "2026-11-15T15:59:59.654880+00:00",
+                "scope": {"model": {"id": None, "display_name": "Fable"}, "surface": None},
+                "is_active": False,
+            },
+            "이상한 항목 하나 -- 이것 때문에 전체가 실패하면 안 됨",
+        ],
+    }
+    _install_fake_playwright(monkeypatch, tmp_path, usage_payload=payload)
+    usage = fetcher.fetch_usage()
+
+    assert usage.session_percent == 4
+    assert usage.week_percent == 25
+    assert [(l.kind, l.percent, l.model, l.is_active) for l in usage.limits] == [
+        ("session", 4, None, False),
+        ("weekly_all", 25, None, True),
+        ("weekly_scoped", 9, "Fable", False),
+    ]
+    assert all(l.resets_at is not None for l in usage.limits)

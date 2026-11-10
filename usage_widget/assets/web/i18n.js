@@ -9,8 +9,10 @@ const I18N_TRANSLATIONS = {
     "usage.opacity_tooltip": "투명도",
     "usage.pin_tooltip": "고정",
     "usage.refresh_tooltip": "새로고침",
-    "usage.session_label": "세션 (5시간)",
-    "usage.week_label": "주간",
+    "usage.active_badge": "적용 중",
+    "reset.not_started": "아직 사용 시작 전",
+    "reset.days": "리셋까지 {days}일 {hours}시간 후",
+    "reset.hours": "리셋까지 {hours}시간 {minutes}분 후",
     "common.close_tooltip": "닫기",
     "common.resize_tooltip": "크기 조절",
     "settings.title": "설정",
@@ -36,8 +38,10 @@ const I18N_TRANSLATIONS = {
     "usage.opacity_tooltip": "Opacity",
     "usage.pin_tooltip": "Pin",
     "usage.refresh_tooltip": "Refresh",
-    "usage.session_label": "Session (5h)",
-    "usage.week_label": "Weekly",
+    "usage.active_badge": "Active",
+    "reset.not_started": "Not started yet",
+    "reset.days": "Resets in {days}d {hours}h",
+    "reset.hours": "Resets in {hours}h {minutes}m",
     "common.close_tooltip": "Close",
     "common.resize_tooltip": "Resize",
     "settings.title": "Settings",
@@ -63,8 +67,10 @@ const I18N_TRANSLATIONS = {
     "usage.opacity_tooltip": "透明度",
     "usage.pin_tooltip": "固定",
     "usage.refresh_tooltip": "更新",
-    "usage.session_label": "セッション（5時間）",
-    "usage.week_label": "週間",
+    "usage.active_badge": "適用中",
+    "reset.not_started": "まだ使用開始前",
+    "reset.days": "リセットまで{days}日{hours}時間",
+    "reset.hours": "リセットまで{hours}時間{minutes}分",
     "common.close_tooltip": "閉じる",
     "common.resize_tooltip": "サイズ変更",
     "settings.title": "設定",
@@ -90,8 +96,10 @@ const I18N_TRANSLATIONS = {
     "usage.opacity_tooltip": "透明度",
     "usage.pin_tooltip": "固定",
     "usage.refresh_tooltip": "刷新",
-    "usage.session_label": "会话（5小时）",
-    "usage.week_label": "每周",
+    "usage.active_badge": "生效中",
+    "reset.not_started": "尚未开始使用",
+    "reset.days": "距重置还有{days}天{hours}小时",
+    "reset.hours": "距重置还有{hours}小时{minutes}分钟",
     "common.close_tooltip": "关闭",
     "common.resize_tooltip": "调整大小",
     "settings.title": "设置",
@@ -118,6 +126,16 @@ function i18nText(lang, key) {
   const table = I18N_TRANSLATIONS[lang] || I18N_TRANSLATIONS.ko;
   return table[key] ?? I18N_TRANSLATIONS.ko[key] ?? key;
 }
+
+// i18n.py의 t(key, lang, **kwargs)처럼 "{days}" 같은 자리 표시자를 채운다.
+function i18nFormat(lang, key, vars) {
+  return i18nText(lang, key).replace(/\{(\w+)\}/g, (m, name) => (name in vars ? vars[name] : m));
+}
+
+// 리셋 시각을 "11월 16일 (일) 오전 1:00"처럼 그 언어 습관에 맞는 형식으로
+// 보여줄 때 쓰는 로케일 -- 날짜/시간 형식은 브라우저(WebView2)의 Intl이
+// 언어별로 알아서 맞춰준다.
+const I18N_DATE_LOCALES = { ko: "ko-KR", en: "en-US", ja: "ja-JP", "zh-CN": "zh-CN" };
 
 // 트레이 아이콘 스타일 이름(도넛 게이지/배터리/...)은 설정 팝업이 열릴 때
 // Python 쪽(usage_widget/i18n.py의 tray_style_labels())에서 초기 데이터로

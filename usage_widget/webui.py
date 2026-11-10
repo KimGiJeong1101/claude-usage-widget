@@ -31,7 +31,7 @@ from webview.window import FixPoint
 
 from usage_widget import autostart, i18n
 from usage_widget.config import Config
-from usage_widget.fetcher import UsageData
+from usage_widget.fetcher import LimitInfo, UsageData
 from usage_widget.tray_icon import DEFAULT_STYLE, STYLES
 
 _ASSET_DIR = Path(__file__).parent / "assets" / "web"
@@ -428,10 +428,16 @@ def _new_window(title: str, page: str, js_api, width: int, height: int, position
     return window
 
 
-def _reset_status_text(reset_at: Optional[datetime], lang: str) -> str:
+def reset_status_text(reset_at: Optional[datetime], lang: str) -> str:
     """아직 그 구간에서 한 번도 사용한 적이 없으면(예: 5시간 세션이 막
     리셋된 직후, 아직 다음 메시지를 보내기 전) API가 리셋 시각 값을
-    안 내려준다."""
+    안 내려준다.
+
+    사용량 팝업은 이 문구를 Python에서 받지 않고 usage.html이 직접 계산한다
+    (팝업을 고정해두면 시간이 흘러도 문구가 그대로 멈춰 있지 않게, 1분마다
+    다시 계산하기 위해서). 이 함수는 트레이 알림처럼 Python이 직접 그리는
+    곳에서만 쓴다 -- 두 곳의 문구 형식은 i18n.py/i18n.js의 "reset.*" 키로
+    맞춰져 있다."""
     if reset_at is None:
         return i18n.t("reset.not_started", lang)
     delta = reset_at - datetime.now()
@@ -526,17 +532,47 @@ def _box_opacity_setter(box: list) -> Callable[[int], None]:
     return _apply
 
 
+def limit_label(limit: LimitInfo, lang: str) -> str:
+    """한도 하나의 화면 표시 이름. 처음 보는 종류(kind)도 숨기지 않고
+    "기타 한도"로 보여준다 -- Anthropic이 새 한도를 추가했을 때, 이름은
+    덜 친절해도 퍼센트/리셋 시각은 바로 보이는 게 아예 안 보이는 것보다
+    낫다."""
+    if limit.kind == "session":
+        return i18n.t("limit.session", lang)
+    if limit.kind == "weekly_all":
+        return i18n.t("limit.weekly_all", lang)
+    if limit.model:
+        return i18n.t("limit.weekly_scoped", lang, model=limit.model)
+    return i18n.t("limit.other", lang)
+
+
 def _usage_to_dict(usage: UsageData, lang: str) -> dict:
+    """리셋 시각은 미리 문구로 만들지 않고 시각(epoch 밀리초) 그대로
+    넘긴다 -- usage.html이 이걸로 "남은 시간"을 1분마다 다시 계산한다
+    (reset_status_text 설명 참고)."""
     return {
-        "session": {
-            "percent": usage.session_percent,
-            "reset_text": _reset_status_text(usage.session_reset_at, lang),
-        },
-        "week": {
-            "percent": usage.week_percent,
-            "reset_text": _reset_status_text(usage.week_reset_at, lang),
-        },
+        "limits": [
+            {
+                "label": limit_label(limit, lang),
+                "percent": limit.percent,
+                "reset_at": int(limit.resets_at.timestamp() * 1000) if limit.resets_at else None,
+                "active": limit.is_active,
+            }
+            for limit in usage.limits
+        ]
     }
+
+
+# 사용량 팝업은 한도 개수만큼 줄을 쌓아서 그리기 때문에, 창 높이도 그
+# 개수에 맞춰 정한다. 이 값들은 usage.html의 실제 렌더링 결과(헤더 + 줄
+# 하나의 높이 + 줄 사이 간격)를 Playwright로 그려서 잰 값이다 -- usage.html의
+# 줄 레이아웃(.limit-row 패딩/글자 크기 등)을 바꾸면 같이 맞춰야 한다.
+_USAGE_POPUP_BASE_HEIGHT = 92  # 실측 89px(헤더 71 + 위아래 여백 24 - 간격 하나 8 + 테두리 2) + 여유 3px
+_USAGE_POPUP_ROW_HEIGHT = 79  # 실측: 줄 하나 71px + 줄 사이 간격 8px
+
+
+def _usage_popup_height(row_count: int) -> int:
+    return _USAGE_POPUP_BASE_HEIGHT + _USAGE_POPUP_ROW_HEIGHT * max(row_count, 1)
 
 
 class _UsageApi:
@@ -572,6 +608,23 @@ class _UsageApi:
         self._opacity = opacity
         self._opacity_fn = opacity_fn
         self._lang = lang
+        self._row_count = max(len(usage.limits), 1)
+
+    def fit_rows(self, row_count: int) -> None:
+        """새로 받은 데이터의 한도 개수가 창을 처음 만들 때와 달라졌으면(예:
+        모델 전용 한도가 새로 생기거나 사라짐), 그 차이만큼 창 높이를
+        늘리거나 줄인다. 투명도 스트립 토글과 같은 이유로 세로 전용
+        리사이즈(_box_vertical_resizer)를 써서, 작업표시줄 쪽 경계는 그대로
+        둔 채 크기가 바뀐다."""
+        try:
+            row_count = max(int(row_count), 1)
+        except (TypeError, ValueError):
+            return
+        if row_count == self._row_count:
+            return
+        delta = _usage_popup_height(row_count) - _usage_popup_height(self._row_count)
+        self._row_count = row_count
+        self._vertical_resize_fn(delta)
 
     def get_initial_data(self) -> dict:
         return {**_usage_to_dict(self._usage, self._lang), "opacity": self._opacity, "language": self._lang}
@@ -706,10 +759,10 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
 
     def create() -> webview.Window:
         box: list = []
-        # 예전 높이 400은 카드 두 개(각각 96px 링 + 18px 여백)가 실제로
-        # 필요로 하는 것보다 눈에 띄게 더 많은 빈 공간을 남겼다 -- usage.html의
-        # <style>에서 링/여백을 줄인 것에 맞춰 이 높이도 함께 줄였다.
-        width, height = 360, 340
+        # 높이는 한도 개수(보통 2~3개)에 맞춰 정한다 -- 예전에는 링 게이지
+        # 카드 두 개 고정이라 360x340이었는데, 한도가 3개 이상인 계정에서는
+        # 그 방식으로는 너무 길어져서 한 줄짜리 막대 목록으로 바꿨다.
+        width, height = 360, _usage_popup_height(len(usage.limits))
         size = [width, height]
         config = Config.load()
         opacity = config.usage_popup_opacity

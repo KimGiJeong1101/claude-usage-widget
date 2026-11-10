@@ -40,7 +40,9 @@ from usage_widget.update_check import RELEASES_URL, check_for_update
 from usage_widget.webui import (
     close_splash,
     init_gui,
+    limit_label,
     push_usage_update,
+    reset_status_text,
     run_gui_loop,
     shutdown_gui,
     show_account_popup,
@@ -89,8 +91,47 @@ def _update_icon(icon: pystray.Icon) -> None:
         icon.title = f"{base} ({i18n.t('tray.tooltip_logged_out', lang)})"
         return
     icon.icon = build_icon_image(_latest_usage.session_percent, _latest_usage.week_percent, style=config.tray_icon_style)
-    label = f"{base} ({_latest_usage.session_percent}%)"
+    usage_text = i18n.t(
+        "tray.tooltip_usage", lang, session=_latest_usage.session_percent, week=_latest_usage.week_percent
+    )
+    label = f"{base} ({usage_text})"
     icon.title = label if _last_error is None else f"{label} ({i18n.t('tray.tooltip_error', lang)})"
+
+
+# 한도마다 이 퍼센트를 처음 넘는 순간 트레이 알림을 한 번씩 띄운다.
+_LIMIT_ALERT_THRESHOLDS = (80, 90)
+# (한도 종류, 모델) -> 마지막으로 알림을 띄운 단계(0/80/90). 리셋 시각은
+# 키로 쓰지 않는다 -- API가 주는 리셋 시각은 요청할 때마다 마이크로초 단위로
+# 조금씩 달라져서, 그걸 키로 쓰면 같은 한도가 매번 새 한도로 보여 알림이
+# 반복될 수 있다.
+_limit_alert_levels: dict = {}
+
+
+def _notify_limit_thresholds(icon: pystray.Icon, usage: UsageData) -> None:
+    """한도가 80%/90%를 새로 넘었으면 알림을 띄운다. 같은 단계에서는 한 번만
+    알리고, 사용량이 다시 그 아래로 내려가면(= 리셋됨) 기록도 같이 내려서,
+    다음에 또 넘으면 다시 알린다. 팝업을 열어보지 않아도 한도가 다 차기
+    전에 미리 알 수 있게 하려는 것이다. 알림은 "되면 좋고 안 돼도 그만"이라
+    여기서 나는 예외가 사용량 갱신 자체를 실패로 만들면 안 된다."""
+    try:
+        lang = Config.load().language
+        for limit in usage.limits:
+            key = (limit.kind, limit.model)
+            level = max((t for t in _LIMIT_ALERT_THRESHOLDS if limit.percent >= t), default=0)
+            previous = _limit_alert_levels.get(key, 0)
+            _limit_alert_levels[key] = level
+            if level > previous:
+                icon.notify(
+                    i18n.t(
+                        "notify.limit_msg",
+                        lang,
+                        label=limit_label(limit, lang),
+                        reset=reset_status_text(limit.resets_at, lang),
+                    ),
+                    i18n.t("notify.limit_title", lang, percent=limit.percent),
+                )
+    except Exception:
+        pass
 
 
 def _fetch_with_relogin(before_login: Optional[Callable[[], None]] = None):
@@ -158,6 +199,7 @@ def _refresh_loop(icon: pystray.Icon) -> None:
                     _latest_usage = _fetch_with_relogin()
                     _last_error = None
                     push_usage_update(_latest_usage)
+                    _notify_limit_thresholds(icon, _latest_usage)
                     _retry_account_email_if_missing()
                 except _LoginCancelledError as exc:
                     # 사용자가 재로그인 창을 닫았다 = 지금은 로그인할 생각이
@@ -204,6 +246,7 @@ def _manual_refresh(icon: pystray.Icon) -> Optional[UsageData]:
         _last_error = None
         _update_icon(icon)
         push_usage_update(_latest_usage)
+        _notify_limit_thresholds(icon, _latest_usage)
         return _latest_usage
     except _LoginCancelledError as exc:
         _last_error = str(exc)

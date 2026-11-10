@@ -6,38 +6,58 @@
 <script src="common.js"></script>
 <script src="i18n.js"></script>
 <style>
-  .usage-card {
-    padding: 14px;
-    border-left: 4px solid var(--severity, var(--card-border));
-    background: linear-gradient(120deg, var(--severity-wash, transparent), var(--card-bg) 55%);
-    transition: border-color 0.3s ease, background 0.3s ease;
-    flex: 1;
+  /* 한도 개수가 계정마다 다르고(2~3개 이상) 창 높이도 그 개수에 맞춰
+     정해지기 때문에(webui.py의 _usage_popup_height), 예전의 80px 링 게이지
+     카드 대신 "이름 / 퍼센트 / 얇은 막대 / 리셋 시각"을 한 줄씩 쌓는 형태다.
+     줄의 패딩/글자 크기를 바꾸면 _USAGE_POPUP_ROW_HEIGHT도 같이 맞춰야 한다.
+     flex: 1 0 auto -- 리사이즈 손잡이로 창을 키우면 줄들이 남는 공간을 나눠
+     가지며 늘어나서, 아래쪽에 빈 공간만 덩그러니 남지 않는다. */
+  .body { gap: 8px; padding-top: 8px; padding-bottom: 16px; }
+  .limit-row {
+    flex: 1 0 auto;
     display: flex;
-  }
-  .usage-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 1; }
-  .usage-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  .usage-title { font-size: 13px; font-weight: 600; letter-spacing: -0.1px; }
-  .usage-reset { line-height: 1.4; }
-  .ring { position: relative; width: 80px; height: 80px; flex: none; }
-  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
-  .ring-track { fill: none; stroke: #edeef1; stroke-width: 12; }
-  .ring-fill {
-    fill: none;
-    stroke-width: 12;
-    stroke-linecap: round;
-    filter: drop-shadow(0 1px 2px rgba(20, 20, 30, 0.12));
-    transition: stroke-dashoffset 0.7s cubic-bezier(0.22, 1, 0.36, 1), stroke 0.3s ease;
-  }
-  .ring-percent {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
+    flex-direction: column;
     justify-content: center;
-    font-size: 18px;
+    gap: 6px;
+    padding: 10px 14px;
+    border-left: 3px solid var(--severity, var(--card-border));
+    transition: border-color 0.3s ease;
+  }
+  .limit-top { display: flex; align-items: baseline; gap: 6px; }
+  .limit-label {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .limit-badge {
+    flex: none;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(59, 130, 246, 0.12);
+    border-radius: 6px;
+    padding: 1px 6px;
+  }
+  .limit-percent {
+    margin-left: auto;
+    flex: none;
+    font-size: 15px;
     font-weight: 700;
     letter-spacing: -0.3px;
   }
+  .limit-bar { height: 6px; border-radius: 3px; background: #edeef1; overflow: hidden; }
+  .limit-bar-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 3px;
+    background: var(--severity, var(--green));
+    transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s ease;
+  }
+  .limit-reset { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .opacity-strip {
     display: none;
     align-items: center;
@@ -100,38 +120,7 @@
       <input type="range" id="opacity" min="40" max="100" step="5">
       <span id="opacity-value"></span>
     </div>
-    <div class="body">
-      <div class="card usage-card" data-key="session">
-        <div class="usage-row">
-          <div class="usage-info">
-            <div class="usage-title" data-i18n="usage.session_label">세션 (5시간)</div>
-            <div class="usage-reset muted"></div>
-          </div>
-          <div class="ring">
-            <svg viewBox="0 0 100 100">
-              <circle class="ring-track" cx="50" cy="50" r="42"></circle>
-              <circle class="ring-fill" cx="50" cy="50" r="42"></circle>
-            </svg>
-            <div class="ring-percent">0%</div>
-          </div>
-        </div>
-      </div>
-      <div class="card usage-card" data-key="week">
-        <div class="usage-row">
-          <div class="usage-info">
-            <div class="usage-title" data-i18n="usage.week_label">주간</div>
-            <div class="usage-reset muted"></div>
-          </div>
-          <div class="ring">
-            <svg viewBox="0 0 100 100">
-              <circle class="ring-track" cx="50" cy="50" r="42"></circle>
-              <circle class="ring-fill" cx="50" cy="50" r="42"></circle>
-            </svg>
-            <div class="ring-percent">0%</div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div class="body" id="limits"></div>
     <div class="resize-grip" title="크기 조절" data-i18n-title="common.resize_tooltip">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M19 13l-6 6M19 19h-4M19 19v-4"/>
@@ -140,51 +129,97 @@
   </div>
 
 <script>
-  const CIRC = 2 * Math.PI * 42;
+  // 트레이 아이콘(tray_icon.color_for_percent)과 같은 기준으로 색을 고른다.
   const colorVar = (p) => (p >= 90 ? "--red" : p >= 70 ? "--yellow" : "--green");
-  const cardFor = (key) => document.querySelector(`.card[data-key="${key}"]`);
+  const limitsEl = document.getElementById("limits");
+  let lang = "ko";
+  let currentLimits = [];
 
-  function hexToRgb(hex) {
-    const n = parseInt(hex.replace("#", ""), 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  function buildRow() {
+    const row = document.createElement("div");
+    row.className = "card limit-row";
+    row.innerHTML = `
+      <div class="limit-top">
+        <span class="limit-label"></span>
+        <span class="limit-badge" hidden></span>
+        <span class="limit-percent">0%</span>
+      </div>
+      <div class="limit-bar"><div class="limit-bar-fill"></div></div>
+      <div class="limit-reset muted"></div>`;
+    return row;
   }
 
-  function paintRing(key, percent, animate) {
-    const card = cardFor(key);
-    const fill = card.querySelector(".ring-fill");
-    const percentLabel = card.querySelector(".ring-percent");
-    const p = Math.max(0, Math.min(100, percent));
-    const color = getComputedStyle(document.documentElement).getPropertyValue(colorVar(p)).trim();
-    const [r, g, b] = hexToRgb(color);
-    const offset = CIRC * (1 - p / 100);
-
-    card.style.setProperty("--severity", color);
-    card.style.setProperty("--severity-wash", `rgba(${r}, ${g}, ${b}, 0.12)`);
-
-    fill.style.transition = "none";
-    fill.style.strokeDasharray = `${CIRC}`;
-    if (!animate) {
-      fill.style.stroke = color;
-      fill.style.strokeDashoffset = `${offset}`;
-      percentLabel.textContent = `${p}%`;
-      return;
-    }
-    fill.style.strokeDashoffset = `${CIRC}`;
-    void fill.getBoundingClientRect();
-    requestAnimationFrame(() => {
-      fill.style.transition = "";
-      fill.style.stroke = color;
-      fill.style.strokeDashoffset = `${offset}`;
+  // "리셋까지 4일 23시간 후 · 11월 16일 (일) 오전 1:00"처럼, 남은 시간과
+  // 실제 리셋 시각을 같이 보여준다. 남은 시간은 Python에서 문구로 받지 않고
+  // 여기서 매번 새로 계산한다 -- 팝업을 고정해두면 몇 시간씩 떠 있을 수
+  // 있는데, 조회 시점에 한 번 만든 문구를 그대로 두면 시간이 흘러도 "2시간
+  // 15분 후"에 계속 멈춰 있게 된다(아래 setInterval 참고).
+  function resetText(resetAt) {
+    if (resetAt == null) return i18nText(lang, "reset.not_started");
+    const totalMinutes = Math.max(Math.floor((resetAt - Date.now()) / 60000), 0);
+    const days = Math.floor(totalMinutes / (24 * 60));
+    const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+    const minutes = totalMinutes % 60;
+    const relative = days
+      ? i18nFormat(lang, "reset.days", { days, hours })
+      : i18nFormat(lang, "reset.hours", { hours, minutes });
+    const absolute = new Date(resetAt).toLocaleString(I18N_DATE_LOCALES[lang] || undefined, {
+      month: "numeric",
+      day: "numeric",
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
     });
-    percentLabel.textContent = `${p}%`;
+    return `${relative} · ${absolute}`;
+  }
+
+  function paintResetTexts() {
+    limitsEl.querySelectorAll(".limit-row").forEach((row, i) => {
+      if (currentLimits[i]) row.querySelector(".limit-reset").textContent = resetText(currentLimits[i].reset_at);
+    });
   }
 
   function paint(data, animate) {
-    paintRing("session", data.session.percent, animate);
-    cardFor("session").querySelector(".usage-reset").textContent = data.session.reset_text;
-    paintRing("week", data.week.percent, animate);
-    cardFor("week").querySelector(".usage-reset").textContent = data.week.reset_text;
+    const limits = data.limits || [];
+    // 한도 개수가 바뀌었을 때만 줄을 새로 만들고 창 높이도 맞춘다. 개수가
+    // 같으면 기존 줄을 그대로 재사용해야, 막대가 0%부터 다시 차오르는
+    // 애니메이션이 자동 갱신 때마다 반복되지 않고 바뀐 만큼만 움직인다.
+    if (limitsEl.children.length !== limits.length) {
+      limitsEl.replaceChildren(...limits.map(buildRow));
+      window.pywebview.api.fit_rows(limits.length);
+      animate = true;
+    }
+    currentLimits = limits;
+    limits.forEach((limit, i) => {
+      const row = limitsEl.children[i];
+      const p = Math.max(0, Math.min(100, limit.percent));
+      const color = getComputedStyle(document.documentElement).getPropertyValue(colorVar(p)).trim();
+      const fill = row.querySelector(".limit-bar-fill");
+      const badge = row.querySelector(".limit-badge");
+
+      row.style.setProperty("--severity", color);
+      row.querySelector(".limit-label").textContent = limit.label;
+      row.querySelector(".limit-label").title = limit.label;
+      row.querySelector(".limit-percent").textContent = `${p}%`;
+      badge.hidden = !limit.active;
+      badge.textContent = i18nText(lang, "usage.active_badge");
+
+      if (animate) {
+        fill.style.transition = "none";
+        fill.style.width = "0%";
+        void fill.getBoundingClientRect();
+        requestAnimationFrame(() => {
+          fill.style.transition = "";
+          fill.style.width = `${p}%`;
+        });
+      } else {
+        fill.style.width = `${p}%`;
+      }
+    });
+    paintResetTexts();
   }
+
+  setInterval(paintResetTexts, 30000);
 
   let pinned = false;
   const pinBtn = document.getElementById("btn-pin");
@@ -309,7 +344,8 @@
 
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();
-    applyI18n(data.language || "ko");
+    lang = data.language || "ko";
+    applyI18n(lang);
     paint(data, true);
     const opacity = data.opacity ?? 100;
     opacityInput.value = opacity;
@@ -321,7 +357,9 @@
   // 이 팝업이 열려있는 동안 백그라운드 자동갱신 스레드(thread, 메인 흐름과
   // 별개로 동시에 돌아가는 작업 단위)가 새 데이터를 받아왔을 때, Python
   // 쪽(webui.push_usage_update)에서 이 함수를 호출해준다.
-  window.__pushUsage = (data) => paint(data, true);
+  // 처음 열 때처럼 0%부터 다시 차오르게(animate=true) 하지 않고, 막대가 이전
+  // 값에서 새 값으로만 부드럽게 움직이게 한다(CSS transition).
+  window.__pushUsage = (data) => paint(data, false);
 </script>
 </body>
 </html>

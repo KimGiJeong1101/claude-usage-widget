@@ -12,9 +12,9 @@ claude.ai는 Cloudflare(웹사이트를 봇으로부터 보호해주는 서비�
 """
 
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from playwright.sync_api import sync_playwright
 
@@ -66,11 +66,30 @@ def _check_status(response, what: str) -> None:
 
 
 @dataclass
+class LimitInfo:
+    """사용량 한도 하나(예: 5시간 세션, 주간 전체, 특정 모델 전용 주간 한도).
+
+    kind는 API가 주는 종류 문자열 그대로다 -- 지금 확인된 값은 "session",
+    "weekly_all", "weekly_scoped"(특정 모델 전용) 세 가지지만, 처음 보는
+    값이 와도 버리지 않고 그대로 들고 있다가 화면에서 "기타 한도"로
+    보여준다. model은 모델 전용 한도일 때 그 모델의 표시 이름(예: "Fable").
+    is_active는 API가 "지금 적용 중인 한도"로 표시해준 것이다."""
+
+    kind: str
+    percent: int
+    resets_at: Optional[datetime]
+    model: Optional[str] = None
+    is_active: bool = False
+
+
+@dataclass
 class UsageData:
+    """session_percent/week_percent는 트레이 아이콘(5시간 세션, 이중 막대의
+    주간)이 쓰는 대표값이고, 팝업은 limits 목록을 있는 그대로 전부 그린다."""
+
     session_percent: int
     week_percent: int
-    session_reset_at: Optional[datetime]
-    week_reset_at: Optional[datetime]
+    limits: List[LimitInfo] = field(default_factory=list)
 
 
 def _parse_reset_at(iso_string: Optional[str]) -> Optional[datetime]:
@@ -126,12 +145,45 @@ def fetch_usage() -> UsageData:
     # 시점의 첫 조회에서 나면 앱이 아예 실행되지 않는다.
     five_hour = data.get("five_hour") or {}
     seven_day = data.get("seven_day") or {}
-    return UsageData(
-        session_percent=round(five_hour.get("utilization") or 0),
-        week_percent=round(seven_day.get("utilization") or 0),
-        session_reset_at=_parse_reset_at(five_hour.get("resets_at")),
-        week_reset_at=_parse_reset_at(seven_day.get("resets_at")),
-    )
+    session_percent = round(five_hour.get("utilization") or 0)
+    week_percent = round(seven_day.get("utilization") or 0)
+
+    limits = _parse_limits(data.get("limits"))
+    if not limits:
+        # "limits" 목록이 없는 응답(예전 형식이거나 일부 요금제)이면, 원래
+        # 보여주던 세션/주간 두 개만으로 대신 채운다.
+        limits = [
+            LimitInfo("session", session_percent, _parse_reset_at(five_hour.get("resets_at"))),
+            LimitInfo("weekly_all", week_percent, _parse_reset_at(seven_day.get("resets_at"))),
+        ]
+    return UsageData(session_percent=session_percent, week_percent=week_percent, limits=limits)
+
+
+def _parse_limits(raw) -> List[LimitInfo]:
+    """API 응답의 "limits" 목록을 읽는다. 이 목록은 계정/요금제에 따라 개수가
+    다르고(예: 특정 모델 전용 주간 한도가 붙는 계정이 있음), Anthropic이
+    언제든 새 종류를 추가할 수 있어서, 고정된 몇 개만 골라 읽지 않고 들어온
+    걸 전부 그대로 담는다. 항목 하나가 이상한 모양이어도 그 항목만 건너뛴다
+    -- 그 하나 때문에 사용량 조회 전체가 실패하면 안 된다."""
+    if not isinstance(raw, list):
+        return []
+    limits = []
+    for item in raw:
+        try:
+            scope = item.get("scope") or {}
+            model = (scope.get("model") or {}).get("display_name")
+            limits.append(
+                LimitInfo(
+                    kind=str(item.get("kind") or ""),
+                    percent=round(item.get("percent") or 0),
+                    resets_at=_parse_reset_at(item.get("resets_at")),
+                    model=model,
+                    is_active=bool(item.get("is_active")),
+                )
+            )
+        except (AttributeError, TypeError, ValueError):
+            continue
+    return limits
 
 
 def fetch_account_email() -> str:
@@ -166,6 +218,9 @@ def fetch_usage_mock() -> UsageData:
     return UsageData(
         session_percent=42,
         week_percent=67,
-        session_reset_at=now + timedelta(hours=2, minutes=15),
-        week_reset_at=now + timedelta(days=3, hours=4),
+        limits=[
+            LimitInfo("session", 42, now + timedelta(hours=2, minutes=15)),
+            LimitInfo("weekly_all", 67, now + timedelta(days=3, hours=4), is_active=True),
+            LimitInfo("weekly_scoped", 85, now + timedelta(days=3, hours=4), model="Fable"),
+        ],
     )
