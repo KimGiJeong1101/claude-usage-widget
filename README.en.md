@@ -41,7 +41,7 @@
 <td width="33%" valign="top">
 
 ### 📊 Live tray gauge
-Session (5-hour) usage always shows in the tray icon + tooltip (%). One click opens the session / weekly detail popup.
+Session (5-hour) usage always shows in the tray icon, with session and weekly % in the tooltip. One click opens a detail popup listing every limit — session, weekly, and per-model ones (e.g. Fable) — and you get a notification when any limit hits 80% or 90%.
 
 </td>
 <td width="33%" valign="top">

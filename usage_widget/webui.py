@@ -556,7 +556,6 @@ def _usage_to_dict(usage: UsageData, lang: str) -> dict:
                 "label": limit_label(limit, lang),
                 "percent": limit.percent,
                 "reset_at": int(limit.resets_at.timestamp() * 1000) if limit.resets_at else None,
-                "active": limit.is_active,
             }
             for limit in usage.limits
         ]

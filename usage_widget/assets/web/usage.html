@@ -33,15 +33,6 @@
     text-overflow: ellipsis;
     min-width: 0;
   }
-  .limit-badge {
-    flex: none;
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--accent);
-    background: rgba(59, 130, 246, 0.12);
-    border-radius: 6px;
-    padding: 1px 6px;
-  }
   .limit-percent {
     margin-left: auto;
     flex: none;
@@ -141,7 +132,6 @@
     row.innerHTML = `
       <div class="limit-top">
         <span class="limit-label"></span>
-        <span class="limit-badge" hidden></span>
         <span class="limit-percent">0%</span>
       </div>
       <div class="limit-bar"><div class="limit-bar-fill"></div></div>
@@ -195,14 +185,11 @@
       const p = Math.max(0, Math.min(100, limit.percent));
       const color = getComputedStyle(document.documentElement).getPropertyValue(colorVar(p)).trim();
       const fill = row.querySelector(".limit-bar-fill");
-      const badge = row.querySelector(".limit-badge");
 
       row.style.setProperty("--severity", color);
       row.querySelector(".limit-label").textContent = limit.label;
       row.querySelector(".limit-label").title = limit.label;
       row.querySelector(".limit-percent").textContent = `${p}%`;
-      badge.hidden = !limit.active;
-      badge.textContent = i18nText(lang, "usage.active_badge");
 
       if (animate) {
         fill.style.transition = "none";
