@@ -41,6 +41,7 @@ from usage_widget.webui import (
     close_splash,
     init_gui,
     limit_label,
+    push_refresh_failed,
     push_usage_update,
     reset_status_text,
     run_gui_loop,
@@ -211,6 +212,9 @@ def _refresh_loop(icon: pystray.Icon) -> None:
                     _logged_out = True
                 except Exception as exc:
                     _last_error = str(exc)
+                    # 열려 있는 사용량 팝업 아래쪽에도 "갱신 실패"를 띄운다 --
+                    # 안 그러면 팝업만 봐서는 예전 숫자인 줄 모른다.
+                    push_refresh_failed()
                 _update_icon(icon)
             interval = config.refresh_seconds
             if not isinstance(interval, (int, float)) or interval <= 0:
@@ -334,7 +338,9 @@ def _on_open(icon: pystray.Icon, item) -> None:
         threading.Thread(target=lambda: _show_account_dialog(icon), daemon=True).start()
         return
     threading.Thread(
-        target=lambda: show_usage_popup(_latest_usage, on_refresh=lambda: _manual_refresh(icon)),
+        target=lambda: show_usage_popup(
+            _latest_usage, on_refresh=lambda: _manual_refresh(icon), refresh_failed=_last_error is not None
+        ),
         daemon=True,
     ).start()
 

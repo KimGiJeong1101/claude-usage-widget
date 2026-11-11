@@ -15,6 +15,8 @@ from usage_widget.tray_icon import DEFAULT_STYLE as DEFAULT_TRAY_ICON_STYLE
 
 DEFAULT_REFRESH_SECONDS = 60
 DEFAULT_USAGE_POPUP_OPACITY = 100
+THEMES = ("system", "light", "dark")
+DEFAULT_THEME = "system"
 
 # config.json을 읽고 쓰는 모든 작업(같은 프로세스 안의 여러 스레드)을 한 줄로
 # 세운다. os.replace의 원자성만으로는 부족했던 이유 두 가지:
@@ -37,6 +39,8 @@ class Config:
     # 넣었음 (자세한 배경은 private notes 저장소 기획 메모의 13.12 참고).
     usage_popup_opacity: int = DEFAULT_USAGE_POPUP_OPACITY
     language: str = DEFAULT_LANGUAGE
+    # "system"(Windows 앱 모드를 따라감) / "light" / "dark" -- 팝업 4개 공통.
+    theme: str = DEFAULT_THEME
 
     @classmethod
     def load(cls) -> "Config":

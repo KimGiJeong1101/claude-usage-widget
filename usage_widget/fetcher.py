@@ -90,6 +90,8 @@ class UsageData:
     session_percent: int
     week_percent: int
     limits: List[LimitInfo] = field(default_factory=list)
+    # 이 데이터를 받아온 시각 -- 사용량 팝업 아래쪽의 "마지막 갱신: N분 전"에 쓴다.
+    fetched_at: datetime = field(default_factory=datetime.now)
 
 
 def _parse_reset_at(iso_string: Optional[str]) -> Optional[datetime]:

@@ -30,7 +30,7 @@ import webview
 from webview.window import FixPoint
 
 from usage_widget import autostart, i18n
-from usage_widget.config import Config
+from usage_widget.config import DEFAULT_THEME, THEMES, Config
 from usage_widget.fetcher import LimitInfo, UsageData
 from usage_widget.tray_icon import DEFAULT_STYLE, STYLES
 
@@ -387,11 +387,42 @@ def _apply_initial_opacity(window: webview.Window, percent: int) -> None:
 # 예상보다 작은 창 안에 내용물이 조용히 잘려나가는 일이 없어진다.
 _WINFORMS_SIZE_FUDGE = (16, 39)
 
+# common.css의 --bg(라이트/다크)와 같은 값이어야 한다.
+_WINDOW_BG = {"light": "#FFFFFF", "dark": "#1E1F23"}
+
+
+def _system_prefers_dark() -> bool:
+    """Windows "앱 모드"가 다크인지. WebView2 안의 CSS(prefers-color-scheme)도
+    바로 이 설정을 따르기 때문에, 창 바탕색도 같은 기준으로 맞춘다. 작업표시줄
+    색("Windows 모드")과는 별개의 설정이다."""
+    if not _IS_WINDOWS:
+        return False
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        ) as key:
+            return winreg.QueryValueEx(key, "AppsUseLightTheme")[0] == 0
+    except OSError:
+        return False
+
+
+def _resolved_theme(theme: str) -> str:
+    if theme in ("light", "dark"):
+        return theme
+    return "dark" if _system_prefers_dark() else "light"
+
 
 def _new_window(title: str, page: str, js_api, width: int, height: int, position: tuple) -> webview.Window:
     """팝업들은 서로 완전히 독립적이다 -- 사용량/설정/계정 팝업을 전부
-    동시에 띄워둘 수 있고, 각자 따로 닫을 수 있다."""
+    동시에 띄워둘 수 있고, 각자 따로 닫을 수 있다.
+
+    창 바탕색(background_color)을 테마에 맞추는 이유: 페이지(HTML)가 다
+    그려지기 전 아주 잠깐 네이티브 창의 바탕색이 보이는데, 다크 모드에서 이게
+    흰색이면 팝업을 열 때마다 하얗게 번쩍인다."""
     x, y = position
+    background = _WINDOW_BG[_resolved_theme(Config.load().theme)]
     create_width, create_height = width, height
     if _IS_WINDOWS:
         create_width += _WINFORMS_SIZE_FUDGE[0]
@@ -423,9 +454,24 @@ def _new_window(title: str, page: str, js_api, width: int, height: int, position
         # 참고). 다른 플랫폼은 아직 검증을 안 해봐서, 일단 예전 방식
         # 그대로 둔다.
         transparent=not _IS_WINDOWS,
+        background_color=background,
     )
     _round_corners(window)
     return window
+
+
+def _push_theme_to_open_popups(theme: str) -> None:
+    """설정에서 테마를 바꿔 저장했을 때, 이미 열려 있는 다른 팝업(예: 고정해둔
+    사용량 팝업)에도 바로 적용한다 -- 언어와 달리 테마는 화면 전체 색이 바뀌는
+    거라, "다시 열어야 바뀐다"고 하면 한동안 팝업마다 색이 제각각이 된다."""
+    with _singleton_dict_lock:
+        windows = list(_singleton_windows.values())
+    script = f"window.__applyTheme && window.__applyTheme({json.dumps(theme)})"
+    for window in windows:
+        try:
+            window.evaluate_js(script)
+        except Exception:
+            pass
 
 
 def reset_status_text(reset_at: Optional[datetime], lang: str) -> str:
@@ -558,7 +604,8 @@ def _usage_to_dict(usage: UsageData, lang: str) -> dict:
                 "reset_at": int(limit.resets_at.timestamp() * 1000) if limit.resets_at else None,
             }
             for limit in usage.limits
-        ]
+        ],
+        "fetched_at": int(usage.fetched_at.timestamp() * 1000),
     }
 
 
@@ -568,7 +615,7 @@ def _usage_to_dict(usage: UsageData, lang: str) -> dict:
 # 배율(DPI)에 따라 몇 px씩 어긋나게 뜰 수 있어서, 최종 높이는 창이 뜬 뒤
 # usage.html의 fitWindowToContent()가 실제 내용 높이를 재서 맞춘다 -- 여기
 # 값은 "처음 뜰 때 크게 움찔거리지 않을 만큼 가까운 출발점"이면 충분하다.
-_USAGE_POPUP_BASE_HEIGHT = 91  # 실측: 헤더 71 + 위아래 여백 26 - 간격 하나 8 + 테두리 2
+_USAGE_POPUP_BASE_HEIGHT = 110  # 실측: 헤더 71 + 위아래 여백 18 - 간격 하나 8 + 하단 "마지막 갱신" 줄 27 + 테두리 2
 _USAGE_POPUP_ROW_HEIGHT = 79  # 실측: 줄 하나 71px + 줄 사이 간격 8px
 
 
@@ -600,7 +647,11 @@ class _UsageApi:
         opacity: int,
         opacity_fn: Callable[[int], None],
         lang: str,
+        theme: str,
+        refresh_failed: bool,
     ):
+        self._theme = theme
+        self._refresh_failed = refresh_failed
         self._usage = usage
         self._refresh_fn = refresh_fn
         self._close_fn = close_fn
@@ -611,7 +662,13 @@ class _UsageApi:
         self._lang = lang
 
     def get_initial_data(self) -> dict:
-        return {**_usage_to_dict(self._usage, self._lang), "opacity": self._opacity, "language": self._lang}
+        return {
+            **_usage_to_dict(self._usage, self._lang),
+            "opacity": self._opacity,
+            "language": self._lang,
+            "theme": self._theme,
+            "refresh_failed": self._refresh_failed,
+        }
 
     def refresh(self) -> Optional[dict]:
         if self._refresh_fn is None:
@@ -734,7 +791,27 @@ def push_usage_update(usage: UsageData) -> None:
         pass
 
 
-def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optional[UsageData]]] = None) -> None:
+def push_refresh_failed() -> None:
+    """main.py가 백그라운드 갱신에 실패했을 때 호출한다. 예전에는 갱신에
+    실패해도 열려 있는 팝업은 예전 숫자를 아무 표시 없이 그대로 보여줘서,
+    그게 방금 받은 값인지 몇 시간 전 값인지 알 수가 없었다(실패 표시는 트레이
+    툴팁에만 있었음). 팝업 아래쪽 "마지막 갱신" 줄을 빨간 "갱신 실패"로 바꾼다
+    -- 다음에 갱신에 성공하면(push_usage_update) 원래대로 돌아온다."""
+    with _singleton_dict_lock:
+        window = _singleton_windows.get("usage")
+    if window is None:
+        return
+    try:
+        window.evaluate_js("window.__markRefreshFailed && window.__markRefreshFailed()")
+    except Exception:
+        pass
+
+
+def show_usage_popup(
+    usage: UsageData,
+    on_refresh: Optional[Callable[[], Optional[UsageData]]] = None,
+    refresh_failed: bool = False,
+) -> None:
     """on_refresh는 있는 경우, 새로고침 버튼을 눌렀을 때 인자 없이 호출되며
     새 데이터가 준비될 때까지 그 안에서 멈춰 있어도(block) 된다. 새로운
     UsageData를 반환하거나(실패 시 None) -- 여기서 멈춰 있어도 괜찮은 이유는
@@ -762,6 +839,8 @@ def show_usage_popup(usage: UsageData, on_refresh: Optional[Callable[[], Optiona
             opacity,
             opacity_fn,
             lang,
+            config.theme,
+            refresh_failed,
         )
         window = _new_window(i18n.t("tray.tooltip_base", lang), "usage.html", api, width, height, (x, y))
         box.append(window)
@@ -796,6 +875,7 @@ class _SettingsApi:
             "autostart_enabled": autostart.is_enabled() if _IS_WINDOWS else False,
             "language": self._config.language,
             "language_options": i18n.LANGUAGE_NAMES,
+            "theme": self._config.theme if self._config.theme in THEMES else DEFAULT_THEME,
         }
 
     def save(self, payload: dict) -> None:
@@ -816,8 +896,12 @@ class _SettingsApi:
             language = payload.get("language")
             if language in i18n.LANGUAGE_NAMES:
                 config.language = language
+            theme = payload.get("theme")
+            if theme in THEMES:
+                config.theme = theme
 
         self._config = Config.modify(mutate)
+        _push_theme_to_open_popups(self._config.theme)
         if _IS_WINDOWS:
             if payload.get("autostart"):
                 autostart.enable()
@@ -841,10 +925,9 @@ def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
     def create() -> webview.Window:
         config = Config.load()
         box: list = []
-        # 언어 선택 카드가 생기기 전 높이(340x440)보다 90만큼 늘렸다 --
-        # 새로 추가된 언어 카드가 body의 스크롤바 없이 바로 들어가도록 하기
-        # 위해서다.
-        width, height = 340, 530
+        # 카드가 하나 생길 때마다(언어: +90, 테마: +90) 높이를 그만큼 늘려서,
+        # body에 스크롤바가 생기지 않고 한 화면에 다 들어가게 한다.
+        width, height = 340, 640
         size = [width, height]
         api = _SettingsApi(config, on_saved, _box_closer(box), _box_resizer(box, size))
         window = _new_window(i18n.t("tray.settings", config.language), "settings.html", api, width, height, _position_centered(width, height))
@@ -868,7 +951,12 @@ class _AccountApi:
         self._lang = lang
 
     def get_initial_data(self) -> dict:
-        return {"email": self._email, "is_logged_out": self._is_logged_out, "language": self._lang}
+        return {
+            "email": self._email,
+            "is_logged_out": self._is_logged_out,
+            "language": self._lang,
+            "theme": Config.load().theme,
+        }
 
     def switch_account(self) -> None:
         self._on_switch()
@@ -913,7 +1001,7 @@ class _SplashApi:
         self._lang = lang
 
     def get_language(self) -> dict:
-        return {"language": self._lang}
+        return {"language": self._lang, "theme": Config.load().theme}
 
 
 def show_splash(lang: str) -> webview.Window:

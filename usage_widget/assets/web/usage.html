@@ -12,7 +12,7 @@
      줄의 패딩/글자 크기를 바꾸면 _USAGE_POPUP_ROW_HEIGHT도 같이 맞춰야 한다.
      flex: 1 0 auto -- 리사이즈 손잡이로 창을 키우면 줄들이 남는 공간을 나눠
      가지며 늘어나서, 아래쪽에 빈 공간만 덩그러니 남지 않는다. */
-  .body { gap: 8px; padding-top: 8px; padding-bottom: 18px; }
+  .body { gap: 8px; padding-top: 8px; padding-bottom: 10px; }
   .limit-row {
     flex: 1 0 auto;
     display: flex;
@@ -39,8 +39,12 @@
     font-size: 15px;
     font-weight: 700;
     letter-spacing: -0.3px;
+    /* 70% 이상이면 숫자도 막대와 같은 경고색으로 -- 위험한 한도가 한눈에
+       들어오게. 노랑은 글자로 쓰면 흐려서 글자 전용 진한 노랑(--yellow-text). */
+    color: var(--severity-text, var(--text));
+    transition: color 0.3s ease;
   }
-  .limit-bar { height: 6px; border-radius: 3px; background: #edeef1; overflow: hidden; }
+  .limit-bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
   .limit-bar-fill {
     height: 100%;
     width: 0;
@@ -49,6 +53,19 @@
     transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s ease;
   }
   .limit-reset { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 맨 아래 "마지막 갱신: N분 전". 지금 보이는 숫자가 방금 받은 건지, 갱신이
+     실패해서 예전 값이 남아 있는 건지를 팝업만 보고도 알 수 있게 한다 --
+     실패하면 빨간 "갱신 실패"로 바뀐다. */
+  .updated {
+    flex: none;
+    padding: 0 22px 14px;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .updated.failed { color: var(--red); }
   .opacity-strip {
     display: none;
     align-items: center;
@@ -112,6 +129,7 @@
       <span id="opacity-value"></span>
     </div>
     <div class="body" id="limits"></div>
+    <div class="updated" id="updated"></div>
     <div class="resize-grip" title="크기 조절" data-i18n-title="common.resize_tooltip">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M19 13l-6 6M19 19h-4M19 19v-4"/>
@@ -180,13 +198,17 @@
       animate = true;
     }
     currentLimits = limits;
+    if (data.fetched_at) fetchedAt = data.fetched_at;
+    refreshFailed = false;
     limits.forEach((limit, i) => {
       const row = limitsEl.children[i];
       const p = Math.max(0, Math.min(100, limit.percent));
-      const color = getComputedStyle(document.documentElement).getPropertyValue(colorVar(p)).trim();
       const fill = row.querySelector(".limit-bar-fill");
 
-      row.style.setProperty("--severity", color);
+      // 색 값을 미리 계산해서 박아넣지 않고 CSS 변수 이름을 그대로 넘긴다 --
+      // 그래야 설정에서 테마를 바꿨을 때 이미 그려진 줄도 바로 새 색을 따라간다.
+      row.style.setProperty("--severity", `var(${colorVar(p)})`);
+      row.style.setProperty("--severity-text", p >= 90 ? "var(--red)" : p >= 70 ? "var(--yellow-text)" : "var(--text)");
       row.querySelector(".limit-label").textContent = limit.label;
       row.querySelector(".limit-label").title = limit.label;
       row.querySelector(".limit-percent").textContent = `${p}%`;
@@ -204,9 +226,37 @@
       }
     });
     paintResetTexts();
+    paintUpdated();
   }
 
-  setInterval(paintResetTexts, 30000);
+  let fetchedAt = null;
+  let refreshFailed = false;
+  const updatedEl = document.getElementById("updated");
+
+  function agoText(ts) {
+    const minutes = Math.max(Math.floor((Date.now() - ts) / 60000), 0);
+    if (minutes < 1) return i18nText(lang, "time.just_now");
+    if (minutes < 60) return i18nFormat(lang, "time.minutes_ago", { minutes });
+    return i18nFormat(lang, "time.hours_ago", { hours: Math.floor(minutes / 60) });
+  }
+
+  function paintUpdated() {
+    if (fetchedAt == null) return;
+    const key = refreshFailed ? "usage.updated_failed" : "usage.updated";
+    updatedEl.textContent = i18nFormat(lang, key, { when: agoText(fetchedAt) });
+    updatedEl.classList.toggle("failed", refreshFailed);
+  }
+
+  // 백그라운드 갱신이 실패했을 때 Python(webui.push_refresh_failed)이 부른다.
+  window.__markRefreshFailed = () => {
+    refreshFailed = true;
+    paintUpdated();
+  };
+
+  setInterval(() => {
+    paintResetTexts();
+    paintUpdated();
+  }, 30000);
 
   // 창 높이를 지금 내용(줄 개수)에 꼭 맞게 늘이거나 줄인다. Python 쪽은 창을
   // 만들 때 "줄 높이 × 개수"로 높이를 미리 짐작해서 열지만(webui.py의
@@ -252,6 +302,7 @@
       if (data) {
         paint(data, false);
       } else {
+        window.__markRefreshFailed();
         refreshBtn.style.color = "var(--red)";
         setTimeout(() => (refreshBtn.style.color = ""), 1200);
       }
@@ -359,8 +410,12 @@
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();
     lang = data.language || "ko";
+    applyTheme(data.theme);
     applyI18n(lang);
     paint(data, true);
+    // paint()는 "새 데이터를 받았다 = 갱신 성공"으로 보고 실패 표시를 지우므로,
+    // 팝업을 열 때 이미 마지막 갱신이 실패한 상태였다면 그 다음에 다시 켠다.
+    if (data.refresh_failed) window.__markRefreshFailed();
     const opacity = data.opacity ?? 100;
     opacityInput.value = opacity;
     opacityValueLabel.textContent = `${opacity}%`;

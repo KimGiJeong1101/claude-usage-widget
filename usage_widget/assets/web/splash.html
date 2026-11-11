@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <link rel="stylesheet" href="common.css">
+<script src="common.js"></script>
 <script src="i18n.js"></script>
 <style>
   .panel {
@@ -73,6 +74,7 @@
   // 사라져버리기 때문이다.
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_language();
+    applyTheme(data.theme);
     applyI18n(data.language || "ko");
   });
 </script>

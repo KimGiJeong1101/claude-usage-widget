@@ -53,3 +53,17 @@ function initResizeGrip() {
     grip.addEventListener("pointerup", onPointerUp);
   });
 }
+
+// 설정의 "테마" 값을 이 팝업에 적용한다. "system"이면 data-theme을 아예 떼서
+// common.css의 prefers-color-scheme(Windows 앱 모드)를 그대로 따라가게 하고,
+// "light"/"dark"면 시스템 설정과 상관없이 그 테마로 고정한다. 설정에서 테마를
+// 바꿔 저장하면 Python(webui.py의 _SettingsApi.save)이 이미 열려 있는 다른
+// 팝업들에도 window.__applyTheme을 불러줘서, 다시 열지 않아도 바로 바뀐다.
+function applyTheme(theme) {
+  if (theme === "light" || theme === "dark") {
+    document.documentElement.dataset.theme = theme;
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+}
+window.__applyTheme = applyTheme;

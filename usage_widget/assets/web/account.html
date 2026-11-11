@@ -61,6 +61,7 @@
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();
     const lang = data.language || "ko";
+    applyTheme(data.theme);
     applyI18n(lang);
     document.getElementById("status-label").textContent = data.is_logged_out
       ? i18nText(lang, "account.status_logged_out_label")

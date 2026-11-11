@@ -26,14 +26,60 @@
   --card-bg: #fbfbfc;
   --text: #17181c;
   --muted: #8b8d94;
+  --track: #edeef1;
+  --hover: rgba(0, 0, 0, 0.063);
+  --hover-soft: rgba(0, 0, 0, 0.031);
+  --card-shadow: rgba(20, 20, 30, 0.03);
   --accent: #3b82f6;
   --accent-hover: #2f6fe0;
   --accent-2: #8b5cf6;
   --green: #22b56f;
   --yellow: #f2ad2e;
+  /* 노란색 그대로 흰 배경 위에 글자로 쓰면 너무 흐려서 안 읽힌다 -- 퍼센트
+     숫자처럼 "글자"에 쓸 때만 조금 더 진한 노랑을 쓴다(다크 모드에서는
+     원래 노랑도 잘 보여서 그대로 씀). */
+  --yellow-text: #c4860c;
   --red: #ef4444;
   --danger-hover: #d94b4b;
   --radius: 20px;
+  color-scheme: light;
+}
+
+/* 다크 모드. 설정의 "테마"가 "시스템"이면 Windows의 앱 모드(라이트/다크)를
+   그대로 따라가고(prefers-color-scheme), "다크"/"라이트"를 직접 고르면
+   common.js의 applyTheme()이 <html data-theme="...">을 붙여서 시스템 설정과
+   상관없이 고정한다. 색은 전부 위의 변수로만 쓰고 있어서, 여기서 변수만
+   바꾸면 사용량/설정/계정/시작 화면 4개 팝업에 한꺼번에 적용된다.
+   (같은 색 묶음을 두 번 적은 건 CSS에 "변수 묶음 재사용"이 없어서다.) */
+:root[data-theme="dark"] {
+  --bg: #1e1f23;
+  --border: #34363c;
+  --card-border: #2e3035;
+  --card-bg: #25272c;
+  --text: #ececf0;
+  --muted: #9b9da5;
+  --track: #393b42;
+  --hover: rgba(255, 255, 255, 0.08);
+  --hover-soft: rgba(255, 255, 255, 0.05);
+  --card-shadow: rgba(0, 0, 0, 0.25);
+  --yellow-text: var(--yellow);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1e1f23;
+    --border: #34363c;
+    --card-border: #2e3035;
+    --card-bg: #25272c;
+    --text: #ececf0;
+    --muted: #9b9da5;
+    --track: #393b42;
+    --hover: rgba(255, 255, 255, 0.08);
+    --hover-soft: rgba(255, 255, 255, 0.05);
+    --card-shadow: rgba(0, 0, 0, 0.25);
+    --yellow-text: var(--yellow);
+    color-scheme: dark;
+  }
 }
 
 * {
@@ -134,7 +180,7 @@ body {
 }
 
 .icon-btn:hover {
-  background: #00000010;
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -195,7 +241,7 @@ body {
   border: 1px solid var(--card-border);
   border-radius: 16px;
   padding: 16px 18px;
-  box-shadow: 0 1px 2px rgba(20, 20, 30, 0.03);
+  box-shadow: 0 1px 2px var(--card-shadow);
 }
 
 .field-label {
@@ -254,7 +300,7 @@ button.secondary {
 }
 
 button.secondary:hover {
-  background: #00000008;
+  background: var(--hover-soft);
 }
 
 button:active {

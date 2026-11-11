@@ -73,4 +73,6 @@ def test_limit_labels():
 
 def test_popup_height_grows_with_limit_count():
     assert _usage_popup_height(3) - _usage_popup_height(2) == _usage_popup_height(2) - _usage_popup_height(1)
-    assert _usage_popup_height(3) < 340, "한도 3개짜리 팝업이 예전 2개짜리(340px)보다 커졌다"
+    # 하단 "마지막 갱신" 줄이 생겨서 3개짜리는 예전(340px)보다 조금 커졌지만,
+    # 평소처럼 한도가 2개면 여전히 예전 2개짜리 링 팝업보다 작아야 한다.
+    assert _usage_popup_height(2) < 340, "한도 2개짜리 팝업이 예전 2개짜리(340px)보다 커졌다"

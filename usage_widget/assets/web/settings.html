@@ -37,6 +37,14 @@
         <select id="language-select"></select>
       </div>
       <div class="card">
+        <p class="field-label" data-i18n="settings.theme_label">테마</p>
+        <select id="theme-select">
+          <option value="system" data-i18n="settings.theme_system">시스템 설정 따라가기</option>
+          <option value="light" data-i18n="settings.theme_light">라이트</option>
+          <option value="dark" data-i18n="settings.theme_dark">다크</option>
+        </select>
+      </div>
+      <div class="card">
         <p class="field-label" data-i18n="settings.refresh_interval_label">자동갱신 주기</p>
         <div class="interval-row">
           <input type="number" id="interval" min="5" step="1">
@@ -65,6 +73,7 @@
   const intervalInput = document.getElementById("interval");
   const styleSelect = document.getElementById("style-select");
   const languageSelect = document.getElementById("language-select");
+  const themeSelect = document.getElementById("theme-select");
   const autostartRow = document.getElementById("autostart-row");
   const autostartCheckbox = document.getElementById("autostart");
 
@@ -78,6 +87,7 @@
       tray_icon_style: styleSelect.value,
       autostart: autostartCheckbox.checked,
       language: languageSelect.value,
+      theme: themeSelect.value,
     });
     window.pywebview.api.close();
   });
@@ -99,8 +109,15 @@
     }
   });
 
+  // 언어 드롭다운과 같은 "저장 전 미리보기"다 -- 고르는 즉시 이 설정 창에만
+  // 먼저 적용해서 어떻게 보이는지 확인할 수 있고, 저장해야 다른 팝업들에도
+  // 적용된다(webui.py의 _push_theme_to_open_popups).
+  themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
+
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();
+    applyTheme(data.theme);
+    themeSelect.value = data.theme || "system";
     applyI18n(data.language || "ko");
     intervalInput.value = data.refresh_seconds;
     for (const [key, label] of Object.entries(data.style_labels)) {
