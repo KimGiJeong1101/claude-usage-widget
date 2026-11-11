@@ -114,10 +114,32 @@ jobs:
         # ClaudeUsageWidget-mac.dmg is the stable name self_update.py-style
         # "always latest" links depend on; the versioned copy is just so a
         # human can tell which build a downloaded file actually is.
+        #
+        # The image size is set explicitly instead of letting hdiutil guess it
+        # from -srcfolder: v0.3.13 failed with "No space left on device" while
+        # copying the app *into* the new image (/Volumes/ClaudeUsageWidget/...),
+        # i.e. hdiutil's own estimate came out smaller than the .app (most
+        # likely after a macos-latest runner image change -- the app itself
+        # barely changed). App size + 20% + 20 MB is plenty of headroom, and
+        # UDZO compresses the free space away so the final .dmg stays small.
+        # HFS+ is used because hdiutil's size estimate for the default APFS
+        # is the one known to come out short. A couple of retries also cover
+        # hdiutil's other known intermittent failure on CI ("Resource busy").
         run: |
-          hdiutil create -volname "ClaudeUsageWidget" \
-            -srcfolder dist/ClaudeUsageWidget.app \
-            -ov -format UDZO ClaudeUsageWidget-mac.dmg
+          APP_MB=$(du -sm dist/ClaudeUsageWidget.app | cut -f1)
+          DMG_MB=$((APP_MB + APP_MB / 5 + 20))
+          echo "app: ${APP_MB} MB -> dmg volume: ${DMG_MB} MB"
+          for attempt in 1 2 3; do
+            if hdiutil create -volname "ClaudeUsageWidget" \
+                -srcfolder dist/ClaudeUsageWidget.app \
+                -size "${DMG_MB}m" -fs HFS+ \
+                -ov -format UDZO ClaudeUsageWidget-mac.dmg; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            echo "hdiutil failed (attempt $attempt), retrying..."
+            sleep 5
+          done
           cp ClaudeUsageWidget-mac.dmg "ClaudeUsageWidget-$VERSION-mac.dmg"
 
       - name: Zip the .app bundle (portable alternative to the .dmg)
