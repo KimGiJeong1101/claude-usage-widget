@@ -927,7 +927,7 @@ def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
         box: list = []
         # 카드가 하나 생길 때마다(언어: +90, 테마: +90) 높이를 그만큼 늘려서,
         # body에 스크롤바가 생기지 않고 한 화면에 다 들어가게 한다.
-        width, height = 340, 640
+        width, height = 340, 515
         size = [width, height]
         api = _SettingsApi(config, on_saved, _box_closer(box), _box_resizer(box, size))
         window = _new_window(i18n.t("tray.settings", config.language), "settings.html", api, width, height, _position_centered(width, height))

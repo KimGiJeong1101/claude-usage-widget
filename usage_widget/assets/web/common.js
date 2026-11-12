@@ -65,5 +65,14 @@ function applyTheme(theme) {
   } else {
     delete document.documentElement.dataset.theme;
   }
+  // common.css 참고 -- 테마가 정해졌으니 이제 팝업 내용을 보여준다.
+  document.documentElement.dataset.themeReady = "1";
 }
 window.__applyTheme = applyTheme;
+
+// 안전장치: 어떤 이유로든 Python 쪽 응답이 늦거나 안 오면(applyTheme이 안
+// 불리면) 팝업이 영영 안 보이는 일은 없어야 하므로, 일정 시간 뒤에는 무조건
+// 보여준다. 이 경우엔 Windows 앱 모드 기준 색으로 보인다(예전 동작과 같음).
+setTimeout(() => {
+  document.documentElement.dataset.themeReady = "1";
+}, 1500);

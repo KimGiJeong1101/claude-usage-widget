@@ -6,11 +6,16 @@
 <script src="common.js"></script>
 <script src="i18n.js"></script>
 <style>
-  .card p.muted { margin: 8px 0 0; }
+  /* 언어/테마처럼 짧은 드롭다운 두 개는 한 카드에 나란히 놓는다 -- 카드를 하나씩
+     따로 쌓으면 테마 카드가 추가된 뒤 창이 640px까지 길어져서 "너무 길다"는
+     피드백이 있었다. */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .two-col .field { min-width: 0; }
   .interval-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-  .interval-row input { width: 84px; }
+  .interval-row input { width: 72px; }
   .interval-row span { font-size: 13px; color: var(--text); }
-  #style-select { margin-top: 10px; }
+  /* "예: 900초 = 15분" 안내는 따로 한 줄을 차지하지 않고 입력칸 옆에 붙인다. */
+  .interval-row .muted { font-size: 11px; color: var(--muted); margin-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #save-btn { margin-top: 4px; }
 </style>
 </head>
@@ -32,25 +37,27 @@
       </button>
     </div>
     <div class="body">
-      <div class="card">
-        <p class="field-label" data-i18n="settings.language_label">언어</p>
-        <select id="language-select"></select>
-      </div>
-      <div class="card">
-        <p class="field-label" data-i18n="settings.theme_label">테마</p>
-        <select id="theme-select">
-          <option value="system" data-i18n="settings.theme_system">시스템 설정 따라가기</option>
-          <option value="light" data-i18n="settings.theme_light">라이트</option>
-          <option value="dark" data-i18n="settings.theme_dark">다크</option>
-        </select>
+      <div class="card two-col">
+        <div class="field">
+          <p class="field-label" data-i18n="settings.language_label">언어</p>
+          <select id="language-select"></select>
+        </div>
+        <div class="field">
+          <p class="field-label" data-i18n="settings.theme_label">테마</p>
+          <select id="theme-select">
+            <option value="system" data-i18n="settings.theme_system">시스템 설정</option>
+            <option value="light" data-i18n="settings.theme_light">라이트</option>
+            <option value="dark" data-i18n="settings.theme_dark">다크</option>
+          </select>
+        </div>
       </div>
       <div class="card">
         <p class="field-label" data-i18n="settings.refresh_interval_label">자동갱신 주기</p>
         <div class="interval-row">
           <input type="number" id="interval" min="5" step="1">
           <span data-i18n="settings.seconds_unit">초</span>
+          <span class="muted" data-i18n="settings.refresh_interval_hint">예: 900초 = 15분</span>
         </div>
-        <p class="muted" data-i18n="settings.refresh_interval_hint">예: 900초 = 15분</p>
       </div>
       <div class="card">
         <p class="field-label" data-i18n="settings.tray_style_label">트레이 아이콘 스타일</p>

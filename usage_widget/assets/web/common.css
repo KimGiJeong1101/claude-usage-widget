@@ -100,6 +100,17 @@ body {
   cursor: default;
 }
 
+/* 테마가 정해지기 전에는 팝업 내용을 아예 그리지 않는다. 테마 값은 페이지가
+   뜬 다음 Python에 물어봐서(pywebviewready -> get_initial_data) 받아오는데, 그
+   사이에는 CSS가 Windows 앱 모드 기준으로 먼저 그려져서 -- 예: 설정은 "다크"
+   인데 Windows 앱 모드는 라이트인 PC -- 흰 화면이 잠깐 보였다가 검게 바뀌었다.
+   이 틈은 모든 PC에 있지만, 느린 PC일수록 길어져서 눈에 띈다. 그동안은 이미
+   테마색으로 맞춰둔 네이티브 창 바탕색(webui.py의 _new_window background_color)만
+   보이게 하고, applyTheme()이 불린 뒤에 한 번에 보여준다. */
+html:not([data-theme-ready]) .panel {
+  visibility: hidden;
+}
+
 .panel {
   position: relative;
   background:
