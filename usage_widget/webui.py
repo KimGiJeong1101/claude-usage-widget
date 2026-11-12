@@ -925,9 +925,9 @@ def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
     def create() -> webview.Window:
         config = Config.load()
         box: list = []
-        # 카드가 하나 생길 때마다(언어: +90, 테마: +90) 높이를 그만큼 늘려서,
-        # body에 스크롤바가 생기지 않고 한 화면에 다 들어가게 한다.
-        width, height = 340, 515
+        # 리스트형(한 줄 = 한 항목, 줄당 52px) 레이아웃을 4개 언어로 그려서 잰
+        # 필요 높이(최대 426px) + 화면 배율 오차 여유. 항목을 추가하면 52px씩 늘리면 된다.
+        width, height = 340, 440
         size = [width, height]
         api = _SettingsApi(config, on_saved, _box_closer(box), _box_resizer(box, size))
         window = _new_window(i18n.t("tray.settings", config.language), "settings.html", api, width, height, _position_centered(width, height))
