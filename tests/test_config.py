@@ -124,3 +124,25 @@ def test_concurrent_modify_never_loses_a_field_or_corrupts_the_file(tmp_path, mo
     final = config_mod.Config.load()
     assert final.refresh_seconds == 149, "다른 스레드의 저장이 refresh_seconds 변경을 덮어썼다"
     assert final.usage_popup_opacity == 89, "다른 스레드의 저장이 투명도 변경을 덮어썼다"
+
+
+def test_settings_save_without_autostart_value_does_not_touch_registry(tmp_path, monkeypatch):
+    """설정 창은 값이 바뀔 때마다 바로 저장한다. 자동 실행 값이 함께 오지 않은
+    저장(자동 실행 줄이 안 보이는 환경 등)에서 "값 없음"을 "끄기"로 받아들여
+    레지스트리의 자동 실행 등록을 지워버리면 안 된다."""
+    from usage_widget import webui
+
+    monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
+    monkeypatch.setattr(webui, "_IS_WINDOWS", True)
+    monkeypatch.setattr(webui, "_push_theme_to_open_popups", lambda theme: None)
+    calls = []
+    monkeypatch.setattr(webui.autostart, "enable", lambda: calls.append("enable"))
+    monkeypatch.setattr(webui.autostart, "disable", lambda: calls.append("disable"))
+
+    api = webui._SettingsApi(config_mod.Config.load(), on_saved=None, close_fn=lambda: None, resize_fn=lambda dw, dh: None)
+    api.save({"theme": "dark", "language": "ko", "tray_icon_style": "donut", "refresh_seconds": 60})
+    assert calls == [], "자동 실행 값이 없는 저장인데 레지스트리를 건드렸다"
+    assert config_mod.Config.load().theme == "dark"
+
+    api.save({"theme": "dark", "language": "ko", "tray_icon_style": "donut", "refresh_seconds": 60, "autostart": False})
+    assert calls == ["disable"]

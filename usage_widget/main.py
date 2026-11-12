@@ -71,6 +71,8 @@ _logged_out = False  # 사용자가 명시적으로 "로그아웃"을 눌렀으�
 # 바꿨을 때, 예전 주기만큼의 대기가 다 끝날 때까지 기다리지 않고 바로 새
 # 주기가 반영되게 한다.
 _refresh_wakeup = threading.Event()
+# 갱신 루프가 지금 기다리고 있는 주기 -- 설정 저장 시 주기가 실제로 바뀌었는지 비교용.
+_current_refresh_interval = DEFAULT_REFRESH_SECONDS
 
 
 class _LoginCancelledError(Exception):
@@ -191,7 +193,7 @@ def _retry_account_email_if_missing() -> None:
 
 
 def _refresh_loop(icon: pystray.Icon) -> None:
-    global _latest_usage, _last_error, _logged_out
+    global _latest_usage, _last_error, _logged_out, _current_refresh_interval
     while True:
         try:
             config = Config.load()
@@ -219,6 +221,7 @@ def _refresh_loop(icon: pystray.Icon) -> None:
             interval = config.refresh_seconds
             if not isinstance(interval, (int, float)) or interval <= 0:
                 interval = DEFAULT_REFRESH_SECONDS
+            _current_refresh_interval = interval
             _refresh_wakeup.wait(interval)
             _refresh_wakeup.clear()
         except Exception:
@@ -357,8 +360,11 @@ def _on_settings(icon: pystray.Icon, item) -> None:
         icon.update_menu()
         # 갱신 주기를 바꿨다면, 예전 주기로 걸어둔 대기가 끝날 때까지
         # 기다리지 않고 바로 새 주기로 다시 시작하게 한다(예: 3600초에서
-        # 60초로 바꿨는데 최대 1시간 동안 반영이 안 되는 문제).
-        _refresh_wakeup.set()
+        # 60초로 바꿨는데 최대 1시간 동안 반영이 안 되는 문제). 설정 창은 값이
+        # 바뀔 때마다 바로 저장하므로, 갱신 주기가 실제로 바뀐 경우에만 깨운다
+        # -- 안 그러면 테마/언어를 바꿀 때마다 사용량 조회가 한 번씩 더 돈다.
+        if Config.load().refresh_seconds != _current_refresh_interval:
+            _refresh_wakeup.set()
 
     threading.Thread(target=lambda: show_settings_popup(on_saved=on_saved), daemon=True).start()
 

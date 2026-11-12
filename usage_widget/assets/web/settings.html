@@ -6,41 +6,51 @@
 <script src="common.js"></script>
 <script src="i18n.js"></script>
 <style>
-  /* 리스트형 레이아웃 -- Windows 11 설정처럼 "한 줄 = 한 항목"(왼쪽 아이콘+이름,
-     오른쪽 입력칸). 예전엔 항목마다 카드를 따로 쌓아서(이름 위, 입력칸 아래)
-     테마 항목이 생긴 뒤 640px까지 길어졌고 "너무 길다"는 피드백이 있었다.
-     한 카드 안에 줄로 나열하면 항목이 늘어도 한 줄(약 52px)씩만 길어진다. */
-  .list { padding: 4px 16px; }
+  /* iOS/macOS 설정 같은 미니멀 레이아웃 -- "화면 / 동작" 두 그룹으로 묶고, 각
+     그룹 안에서 "한 줄 = 한 항목"(왼쪽 이름, 오른쪽 입력칸)으로 나열한다. 예전엔
+     항목마다 카드를 따로 쌓아서 640px까지 길어졌고 "너무 길다"는 피드백이
+     있었다. 시안 몇 개(카드형/아이콘 리스트형/시각형/이 미니멀형)를 렌더링해
+     비교한 뒤 이 형태로 결정. 저장 버튼도 없다 -- 아래 script 참고. */
+  .body { gap: 6px; }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.4px;
+    margin: 6px 4px 2px;
+  }
+  .group {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 0 14px;
+  }
   .row {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 52px;
-    padding: 6px 0;
+    min-height: 46px;
     border-bottom: 1px solid var(--card-border);
   }
   .row:last-child { border-bottom: none; }
-  .row-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
+  .row-name { flex: 1; min-width: 0; font-size: 13px; }
+  /* 입력칸은 테두리 없이 옅은 배경만 -- 줄 구분선이 이미 있어서 테두리까지
+     있으면 선이 너무 많아 보인다. 포커스되면 common.css의 파란 테두리가 뜬다. */
+  .row select,
+  .row input[type="number"] {
     flex: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(59, 130, 246, 0.12);
-    color: var(--accent);
+    border-color: transparent;
+    background-color: var(--hover-soft);
+    padding-top: 5px;
+    padding-bottom: 5px;
   }
-  .row-icon svg { width: 16px; height: 16px; }
-  .row-text { flex: 1; min-width: 0; }
-  .row-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
-  .row-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .row select { width: 132px; flex: none; padding-top: 6px; padding-bottom: 6px; }
-  .row input[type="number"] { width: 64px; flex: none; padding: 6px 8px; text-align: right; }
+  .row select { width: 132px; }
+  .row input[type="number"] { width: 60px; padding-left: 8px; padding-right: 8px; text-align: right; }
   .unit { font-size: 12px; color: var(--muted); flex: none; }
+  .autosave-hint { font-size: 11px; color: var(--muted); margin: 4px 4px 0; }
+  .autosave-hint.saved { color: var(--green); }
 
-  /* 체크박스를 토글 스위치 모양으로 -- 실제로는 그대로 <input type=checkbox>라서
-     저장 로직(autostartCheckbox.checked)은 예전과 똑같다. */
+  /* 체크박스를 토글 스위치 모양으로 -- 실제로는 그대로 <input type=checkbox>다. */
   .switch {
     appearance: none;
     -webkit-appearance: none;
@@ -88,15 +98,14 @@
       </button>
     </div>
     <div class="body">
-      <div class="card list">
+      <div class="section-title" data-i18n="settings.section_display">화면</div>
+      <div class="group">
         <div class="row">
-          <div class="row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg></div>
-          <div class="row-text"><div class="row-name" data-i18n="settings.language_label">언어</div></div>
+          <span class="row-name" data-i18n="settings.language_label">언어</span>
           <select id="language-select"></select>
         </div>
         <div class="row">
-          <div class="row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18z" fill="currentColor" stroke="none"/></svg></div>
-          <div class="row-text"><div class="row-name" data-i18n="settings.theme_label">테마</div></div>
+          <span class="row-name" data-i18n="settings.theme_label">테마</span>
           <select id="theme-select">
             <option value="system" data-i18n="settings.theme_system">시스템 설정</option>
             <option value="light" data-i18n="settings.theme_light">라이트</option>
@@ -104,26 +113,23 @@
           </select>
         </div>
         <div class="row">
-          <div class="row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 11-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></div>
-          <div class="row-text">
-            <div class="row-name" data-i18n="settings.refresh_interval_label">자동갱신 주기</div>
-            <div class="row-sub" data-i18n="settings.refresh_interval_hint">예: 900초 = 15분</div>
-          </div>
-          <input type="number" id="interval" min="5" step="1">
-          <span class="unit" data-i18n="settings.seconds_unit">초</span>
-        </div>
-        <div class="row">
-          <div class="row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="14" width="18" height="7" rx="2"/><circle cx="17" cy="17.5" r="1.5" fill="currentColor"/></svg></div>
-          <div class="row-text"><div class="row-name" data-i18n="settings.tray_style_label">트레이 아이콘</div></div>
+          <span class="row-name" data-i18n="settings.tray_style_label">트레이 아이콘</span>
           <select id="style-select"></select>
         </div>
+      </div>
+      <div class="section-title" data-i18n="settings.section_behavior">동작</div>
+      <div class="group">
+        <div class="row">
+          <span class="row-name" data-i18n="settings.refresh_interval_label">자동갱신 주기</span>
+          <input type="number" id="interval" min="5" step="1" title="예: 900초 = 15분" data-i18n-title="settings.refresh_interval_hint">
+          <span class="unit" data-i18n="settings.seconds_unit">초</span>
+        </div>
         <div class="row" id="autostart-row">
-          <div class="row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9M6.3 7a8 8 0 1011.4 0"/></svg></div>
-          <div class="row-text"><label class="row-name" for="autostart" data-i18n="settings.autostart_label">PC 시작 시 자동 실행</label></div>
+          <label class="row-name" for="autostart" data-i18n="settings.autostart_label">PC 시작 시 자동 실행</label>
           <input type="checkbox" class="switch" id="autostart">
         </div>
       </div>
-      <button class="primary" id="save-btn" data-i18n="settings.save_button">저장</button>
+      <div class="autosave-hint" id="autosave-hint" data-i18n="settings.autosave_hint">변경 사항은 바로 저장됩니다</div>
     </div>
     <div class="resize-grip" title="크기 조절" data-i18n-title="common.resize_tooltip">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -139,43 +145,83 @@
   const themeSelect = document.getElementById("theme-select");
   const autostartRow = document.getElementById("autostart-row");
   const autostartCheckbox = document.getElementById("autostart");
+  const autosaveHint = document.getElementById("autosave-hint");
+  let showAutostart = false;
+  let lastValidInterval = 60;
 
   document.getElementById("btn-close").addEventListener("click", () => {
     window.pywebview.api.close();
   });
 
-  document.getElementById("save-btn").addEventListener("click", async () => {
-    await window.pywebview.api.save({
-      refresh_seconds: parseInt(intervalInput.value, 10) || 60,
+  // 저장 버튼 없이, 값이 바뀌는 즉시 저장한다(Windows 11/macOS 설정과 같은 방식).
+  // 예전엔 "저장"을 눌러야 적용되고 그냥 닫으면 취소됐는데, 미니멀 레이아웃에서
+  // 버튼 한 줄을 없애려고 바꿨다. 매번 화면의 현재 값 전체를 보내지만, Python
+  // 쪽(_SettingsApi.save)이 파일의 최신 값 위에 이 팝업 담당 필드만 덮어써서
+  // 다른 팝업이 저장한 값(투명도 등)은 그대로 남는다.
+  async function saveNow() {
+    const payload = {
+      refresh_seconds: lastValidInterval,
       tray_icon_style: styleSelect.value,
-      autostart: autostartCheckbox.checked,
       language: languageSelect.value,
       theme: themeSelect.value,
-    });
-    window.pywebview.api.close();
-  });
+    };
+    // 자동 실행은 Windows에서만 보이는 항목이라, 안 보이는 환경에서는 아예 보내지
+    // 않는다(보내면 Python이 "끄기"로 받아들여 레지스트리를 건드린다).
+    if (showAutostart) payload.autostart = autostartCheckbox.checked;
+    try {
+      await window.pywebview.api.save(payload);
+      flashSaved();
+    } catch (e) {
+      // 저장 실패(예: 레지스트리 권한 문제)해도 창이 먹통이 되면 안 된다.
+    }
+  }
 
-  // 언어 드롭다운 값이 바뀌는 즉시 이 화면에 있는 라벨들을 곧바로
-  // 다시 번역해서 보여준다. 투명도 슬라이더와 같은 "저장하기 전에 미리
-  // 보여준다"는 아이디어다 -- 실제로 저장하고 트레이 메뉴/다른 팝업들까지
-  // 반영되게 하려면 여전히 저장(save) 버튼을 눌러야 한다. 트레이 아이콘
-  // 스타일 드롭다운의 각 항목(option)들은 data-i18n 속성이 붙어있지
-  // 않은데, 이 텍스트들은 팝업을 열었을 당시의 언어로 이미 번역되어
-  // Python에서 내려온 것이기 때문이다. 그래서 이 항목들만은 여기서 따로
-  // 직접 다시 라벨을 붙여줘야 하고, 안 그러면 이 화면에서 유일하게 실시간
-  // 미리보기가 안 되는 요소가 되어버린다.
+  // 안내 문구를 잠깐 초록색으로 -- "저장됐다"는 걸 버튼 없이도 알 수 있게.
+  let savedTimer = null;
+  function flashSaved() {
+    autosaveHint.classList.add("saved");
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => autosaveHint.classList.remove("saved"), 900);
+  }
+
+  // 언어를 바꾸면 이 화면의 글자부터 바로 새 언어로 바꾸고 저장한다. 트레이 아이콘
+  // 스타일 이름들은 data-i18n이 없어서(팝업을 열 때 Python이 번역해서 내려준
+  // 값이라) 여기서 따로 다시 붙여준다.
   languageSelect.addEventListener("change", () => {
     const lang = languageSelect.value;
     applyI18n(lang);
     for (const opt of styleSelect.options) {
       opt.textContent = trayStyleLabel(lang, opt.value);
     }
+    saveNow();
   });
 
-  // 언어 드롭다운과 같은 "저장 전 미리보기"다 -- 고르는 즉시 이 설정 창에만
-  // 먼저 적용해서 어떻게 보이는지 확인할 수 있고, 저장해야 다른 팝업들에도
-  // 적용된다(webui.py의 _push_theme_to_open_popups).
-  themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
+  // 이 창에 먼저 적용하고 저장 -- 저장하면 Python이 열려 있는 다른 팝업에도
+  // 바로 적용해준다(webui.py의 _push_theme_to_open_popups).
+  themeSelect.addEventListener("change", () => {
+    applyTheme(themeSelect.value);
+    saveNow();
+  });
+
+  styleSelect.addEventListener("change", saveNow);
+  autostartCheckbox.addEventListener("change", saveNow);
+
+  // 숫자는 한 글자 칠 때마다 저장하면 "6"(6초)처럼 중간값이 저장되므로, 입력칸을
+  // 벗어나거나 엔터를 쳤을 때("change") 한 번만 저장한다. 비었거나 이상한 값이면
+  // 마지막으로 정상이던 값으로 되돌린다(5초 미만은 Python 쪽이 5로 맞춘다).
+  intervalInput.addEventListener("change", () => {
+    const value = parseInt(intervalInput.value, 10);
+    if (!Number.isFinite(value) || value <= 0) {
+      intervalInput.value = lastValidInterval;
+      return;
+    }
+    lastValidInterval = Math.max(5, value);
+    intervalInput.value = lastValidInterval;
+    saveNow();
+  });
+  intervalInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") intervalInput.blur();
+  });
 
   window.addEventListener("pywebviewready", async () => {
     const data = await window.pywebview.api.get_initial_data();
@@ -183,6 +229,7 @@
     themeSelect.value = data.theme || "system";
     applyI18n(data.language || "ko");
     intervalInput.value = data.refresh_seconds;
+    lastValidInterval = data.refresh_seconds;
     for (const [key, label] of Object.entries(data.style_labels)) {
       const opt = document.createElement("option");
       opt.value = key;
@@ -197,7 +244,8 @@
       languageSelect.appendChild(opt);
     }
     languageSelect.value = data.language;
-    if (data.show_autostart) {
+    showAutostart = !!data.show_autostart;
+    if (showAutostart) {
       autostartCheckbox.checked = data.autostart_enabled;
     } else {
       autostartRow.style.display = "none";

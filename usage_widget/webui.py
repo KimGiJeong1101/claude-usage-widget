@@ -902,8 +902,11 @@ class _SettingsApi:
 
         self._config = Config.modify(mutate)
         _push_theme_to_open_popups(self._config.theme)
-        if _IS_WINDOWS:
-            if payload.get("autostart"):
+        # 설정 창은 값이 바뀔 때마다 바로 저장하는데(settings.html), 자동 실행 값이
+        # 함께 오지 않은 저장(예: 자동 실행 줄이 안 보이는 환경)에서는 레지스트리를
+        # 건드리지 않는다 -- "값이 없음"을 "끄기"로 받아들이면 안 되기 때문이다.
+        if _IS_WINDOWS and "autostart" in payload:
+            if payload["autostart"]:
                 autostart.enable()
             else:
                 autostart.disable()
@@ -925,9 +928,9 @@ def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
     def create() -> webview.Window:
         config = Config.load()
         box: list = []
-        # 리스트형(한 줄 = 한 항목, 줄당 52px) 레이아웃을 4개 언어로 그려서 잰
-        # 필요 높이(최대 426px) + 화면 배율 오차 여유. 항목을 추가하면 52px씩 늘리면 된다.
-        width, height = 340, 440
+        # 미니멀 레이아웃(두 그룹, 한 줄 = 한 항목, 줄당 46px)을 4개 언어로 그려서 잰
+        # 필요 높이(최대 407px) + 화면 배율 오차 여유. 항목을 추가하면 46px씩 늘리면 된다.
+        width, height = 340, 422
         size = [width, height]
         api = _SettingsApi(config, on_saved, _box_closer(box), _box_resizer(box, size))
         window = _new_window(i18n.t("tray.settings", config.language), "settings.html", api, width, height, _position_centered(width, height))
