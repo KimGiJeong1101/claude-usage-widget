@@ -17,7 +17,9 @@ pystray의 메뉴 콜백에서 root.after(...) 같은 걸 거치지 않고 팝�
 바로 열 수 있다.
 """
 
+import base64
 import ctypes
+import io
 import json
 import os
 import sys
@@ -32,7 +34,7 @@ from webview.window import FixPoint
 from usage_widget import autostart, i18n
 from usage_widget.config import DEFAULT_THEME, THEMES, Config
 from usage_widget.fetcher import LimitInfo, UsageData
-from usage_widget.tray_icon import DEFAULT_STYLE, STYLES
+from usage_widget.tray_icon import DEFAULT_STYLE, STYLES, build_icon_image
 
 _ASSET_DIR = Path(__file__).parent / "assets" / "web"
 _IS_WINDOWS = sys.platform == "win32"
@@ -850,6 +852,19 @@ def show_usage_popup(
     _focus_or_create("usage", create)
 
 
+def _tray_style_previews() -> dict:
+    """설정 창의 "트레이 아이콘" 드롭다운 옆에 붙는 작은 미리보기 그림들. "도넛
+    게이지", "막대" 같은 이름만으로는 실제로 어떤 모양인지 알기 어려워서,
+    실제 트레이 아이콘을 그리는 코드(build_icon_image)로 그대로 그려서 넘긴다
+    -- 그래서 설정 창의 미리보기와 진짜 트레이 아이콘 모양이 항상 같다."""
+    previews = {}
+    for style in STYLES:
+        buf = io.BytesIO()
+        build_icon_image(62, 35, style=style).save(buf, "PNG")
+        previews[style] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    return previews
+
+
 class _SettingsApi:
     def __init__(
         self,
@@ -871,6 +886,7 @@ class _SettingsApi:
             # 기본 스타일을 대신 선택해서 보여준다.
             "tray_icon_style": self._config.tray_icon_style if self._config.tray_icon_style in STYLES else DEFAULT_STYLE,
             "style_labels": i18n.tray_style_labels(self._config.language),
+            "style_previews": _tray_style_previews(),
             "show_autostart": _IS_WINDOWS,
             "autostart_enabled": autostart.is_enabled() if _IS_WINDOWS else False,
             "language": self._config.language,

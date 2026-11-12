@@ -193,7 +193,7 @@ STYLE_LABELS = {
     "battery": "배터리",
     "bar": "막대",
     "big_number": "숫자",
-    "dual_bar": "이중 막대 (세션+주간)",
+    "dual_bar": "이중 막대",
 }
 DEFAULT_STYLE = "donut"
 
