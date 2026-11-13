@@ -325,7 +325,7 @@ def _round_corners(window: webview.Window, radius: int = _PANEL_RADIUS) -> None:
     window.events.resized += apply
 
 
-def _force_foreground(window: webview.Window) -> None:
+def _bring_to_foreground(window: webview.Window) -> None:
     """팝업 창을 pystray 콜백에서 바로 만들지 않고 항상 별도의 백그라운드
     스레드로 감싸서 만드는데(main.py의 스레딩 설명 참고), Windows 입장에서는
     이게 "포그라운드(foreground)에 떠 있지 않은 프로세스가 갑자기 새 창을
@@ -342,22 +342,30 @@ def _force_foreground(window: webview.Window) -> None:
     SetForegroundWindow를 허용해준다."""
     if not _IS_WINDOWS:
         return
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = window.native.Handle.ToInt32()
+        fg_hwnd = user32.GetForegroundWindow()
+        fg_pid = ctypes.c_ulong()
+        fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, ctypes.byref(fg_pid))
+        cur_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+        user32.AttachThreadInput(cur_thread, fg_thread, True)
+        user32.SetForegroundWindow(hwnd)
+        user32.AttachThreadInput(cur_thread, fg_thread, False)
+    except Exception:
+        pass
 
-    def apply(*_args):
-        try:
-            user32 = ctypes.windll.user32
-            hwnd = window.native.Handle.ToInt32()
-            fg_hwnd = user32.GetForegroundWindow()
-            fg_pid = ctypes.c_ulong()
-            fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, ctypes.byref(fg_pid))
-            cur_thread = ctypes.windll.kernel32.GetCurrentThreadId()
-            user32.AttachThreadInput(cur_thread, fg_thread, True)
-            user32.SetForegroundWindow(hwnd)
-            user32.AttachThreadInput(cur_thread, fg_thread, False)
-        except Exception:
-            pass
 
-    window.events.shown += apply
+def _force_foreground(window: webview.Window) -> None:
+    """새로 만든 창이 처음 화면에 뜨는 시점(shown 이벤트)에 _bring_to_foreground를
+    걸어준다. 이미 떠 있던 창을 다시 불러오는 경우(_focus_or_create의
+    existing.show() 경로)는 shown이 다시 발생하지 않으므로, 그쪽은 이 함수가
+    아니라 _bring_to_foreground를 직접 불러야 한다 -- 안 그러면 "이미 열려있는
+    설정 창을 트레이 메뉴로 다시 불러왔을 때" 똑같이 포커스를 못 받는, 이걸
+    처음 고쳤던 것과 같은 문제가 그 경로에서만 재발한다."""
+    if not _IS_WINDOWS:
+        return
+    window.events.shown += lambda *_args: _bring_to_foreground(window)
 
 
 _GWL_EXSTYLE = -20
@@ -811,6 +819,7 @@ def _focus_or_create(key: str, create: Callable[[], webview.Window]) -> None:
             existing.show()
         except Exception:
             pass
+        _bring_to_foreground(existing)
 
 
 def push_usage_update(usage: UsageData) -> None:
