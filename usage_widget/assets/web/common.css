@@ -331,6 +331,17 @@ select {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* select 박스 자체(닫혀 있을 때 보이는 부분)는 위 공통 규칙으로 우리
+   테마 색을 그대로 입지만, 펼쳤을 때 나오는 옵션 목록은 OS/브라우저가
+   별도로 그려서 color-scheme만으로는 Chromium/WebView2에서 색이 제대로
+   안 먹는 경우가 있다(다크 모드인데 목록 배경이 밝게 나와서 글자가 거의
+   안 보이는 문제). option에 배경/글자색을 직접 지정해두면 이 목록
+   렌더링에도 안정적으로 반영된다.*/
+select option {
+  background: var(--bg);
+  color: var(--text);
+}
+
 input[type="text"]:focus,
 input[type="number"]:focus,
 select:focus {
