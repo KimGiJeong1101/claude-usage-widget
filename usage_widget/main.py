@@ -31,7 +31,7 @@ import pystray
 from usage_widget import __version__, autostart, i18n, single_instance
 from usage_widget.auth import has_saved_session, login_and_save_session
 from usage_widget.config import DEFAULT_REFRESH_SECONDS, Config
-from usage_widget.fetcher import SessionExpiredError, UsageData, browser_launch_lock, fetch_account_email, fetch_usage
+from usage_widget.fetcher import SessionExpiredError, UsageData, browser_launch_lock, fetch_account_info, fetch_usage
 from usage_widget.paths import session_state_path
 from usage_widget import self_update
 from usage_widget.self_update import apply_update, can_self_update, cleanup_stale_update_files
@@ -59,9 +59,9 @@ _update_notified_versions: set = set()
 
 _latest_usage = None
 _last_error = None
-_account_email = None
-_last_email_attempt = 0.0
-_EMAIL_RETRY_SECONDS = 10 * 60
+_account_info = None
+_last_account_info_attempt = 0.0
+_ACCOUNT_INFO_RETRY_SECONDS = 10 * 60
 _logged_out = False  # 사용자가 명시적으로 "로그아웃"을 눌렀으면 True가 됨:
 # 그 이후로는 "계정 변경"을 누르기 전까지, 사용량을 다시 가져오려는 시도도
 # 자동 재로그인 시도도 완전히 멈춘 채로 있는다. 사용자가 재로그인 창을
@@ -165,31 +165,31 @@ def _fetch_with_relogin(before_login: Optional[Callable[[], None]] = None):
         if not login_and_save_session():
             raise _LoginCancelledError("login window closed before signing in")
         # 재로그인할 때 예전과 다른 계정으로 로그인했을 수도 있으니,
-        # 계정 팝업에 보여줄 이메일도 같이 새로 가져온다.
-        _refresh_account_email()
+        # 계정 팝업에 보여줄 이름/이메일/소속 조직도 같이 새로 가져온다.
+        _refresh_account_info()
         return fetch_usage()
 
 
-def _refresh_account_email() -> None:
-    """되면 좋고 안 돼도 그만인 작업이다 -- 이메일 주소는 "계정" 팝업에서만
-    보여주는 정보라서, 여기서 실패해도 사용량을 가져오는 것 자체에는 전혀
-    영향을 주면 안 된다."""
-    global _account_email, _last_email_attempt
-    _last_email_attempt = time.monotonic()
+def _refresh_account_info() -> None:
+    """되면 좋고 안 돼도 그만인 작업이다 -- 이름/이메일/소속 조직은 "계정"
+    팝업에서만 보여주는 정보라서, 여기서 실패해도 사용량을 가져오는 것
+    자체에는 전혀 영향을 주면 안 된다."""
+    global _account_info, _last_account_info_attempt
+    _last_account_info_attempt = time.monotonic()
     try:
-        _account_email = fetch_account_email()
+        _account_info = fetch_account_info()
     except Exception:
-        _account_email = None
+        _account_info = None
 
 
-def _retry_account_email_if_missing() -> None:
-    """시작할 때 이메일 조회가 한 번 실패하면(네트워크가 잠깐 끊김 등),
+def _retry_account_info_if_missing() -> None:
+    """시작할 때 계정 정보 조회가 한 번 실패하면(네트워크가 잠깐 끊김 등),
     예전에는 다시 시도하는 곳이 없어서 계정 팝업에 "확인 중..."이 영원히
-    떠 있었다. 사용량 조회에 성공한(= 세션은 멀쩡한) 시점에 이메일이 아직
-    없으면 다시 시도하되, headless Chrome을 매 주기마다 한 번씩 더 띄우는
-    일이 없도록 시도 간격을 둔다."""
-    if _account_email is None and time.monotonic() - _last_email_attempt >= _EMAIL_RETRY_SECONDS:
-        _refresh_account_email()
+    떠 있었다. 사용량 조회에 성공한(= 세션은 멀쩡한) 시점에 계정 정보가
+    아직 없으면 다시 시도하되, headless Chrome을 매 주기마다 한 번씩 더
+    띄우는 일이 없도록 시도 간격을 둔다."""
+    if _account_info is None and time.monotonic() - _last_account_info_attempt >= _ACCOUNT_INFO_RETRY_SECONDS:
+        _refresh_account_info()
 
 
 def _refresh_loop(icon: pystray.Icon) -> None:
@@ -203,7 +203,7 @@ def _refresh_loop(icon: pystray.Icon) -> None:
                     _last_error = None
                     push_usage_update(_latest_usage)
                     _notify_limit_thresholds(icon, _latest_usage)
-                    _retry_account_email_if_missing()
+                    _retry_account_info_if_missing()
                 except _LoginCancelledError as exc:
                     # 사용자가 재로그인 창을 닫았다 = 지금은 로그인할 생각이
                     # 없다는 뜻이다. 다음 주기에 또 로그인 창을 띄우지 않고,
@@ -278,11 +278,11 @@ def _do_logout(icon: pystray.Icon) -> None:
     이미 지워졌는데 플래그는 아직 False인 짧은 틈에 백그라운드 갱신이
     끼어들어서 "세션 없음 = 재로그인 필요"로 판단하고, 방금 로그아웃한
     사용자 앞에 로그인 창을 띄울 수 있다."""
-    global _logged_out, _account_email
+    global _logged_out, _account_info
     _logged_out = True
     with browser_launch_lock:
         session_state_path().unlink(missing_ok=True)
-    _account_email = None
+    _account_info = None
     _update_icon(icon)
 
 
@@ -294,7 +294,7 @@ def _do_switch_account(icon: pystray.Icon) -> None:
     부르면 그동안 pystray의 메시지 루프 전체가 멈춰버린다."""
 
     def worker():
-        global _latest_usage, _last_error, _logged_out, _account_email
+        global _latest_usage, _last_error, _logged_out, _account_info
         # 계정 전환이 진행되는 동안에는 백그라운드 갱신 루프를 일시정지
         # 상태로 둔다 -- 안 그러면 세션 파일이 지워진 걸 본 갱신 루프도
         # "재로그인 필요"로 판단해서 자기 로그인 창을 띄우려고 락 뒤에서
@@ -305,7 +305,7 @@ def _do_switch_account(icon: pystray.Icon) -> None:
         # 독스트링 참고).
         with browser_launch_lock:
             session_state_path().unlink(missing_ok=True)
-        _account_email = None
+        _account_info = None
         try:
             if not login_and_save_session():
                 # 사용자가 로그인 창을 닫았다 -- 여기서 _fetch_with_relogin()
@@ -318,7 +318,7 @@ def _do_switch_account(icon: pystray.Icon) -> None:
             _last_error = None
             _logged_out = False
             push_usage_update(_latest_usage)
-            _refresh_account_email()
+            _refresh_account_info()
         except Exception as exc:
             _last_error = str(exc)
             _logged_out = True  # 로그인이 끝까지 안 됐으니 계속 일시정지 상태로 둔다(자꾸 재시도하며 귀찮게 하지 않음)
@@ -329,7 +329,7 @@ def _do_switch_account(icon: pystray.Icon) -> None:
 
 def _show_account_dialog(icon: pystray.Icon) -> None:
     show_account_popup(
-        _account_email,
+        _account_info,
         _logged_out,
         on_switch=lambda: _do_switch_account(icon),
         on_logout=lambda: _do_logout(icon),
@@ -684,7 +684,7 @@ def run() -> None:
                     # 그대로 두면 로그인 화면 한가운데를 가려버린다 -- 로그인
                     # 창을 띄우기 직전에 닫는다.
                     _latest_usage = _fetch_with_relogin(before_login=lambda: close_splash(splash))
-                _refresh_account_email()
+                _refresh_account_info()
             except _LoginCancelledError as exc:
                 # 사용자가 로그인 창을 닫았다. 예전에는 이걸 "실행 실패"로
                 # 보고 에러 메시지와 함께 앱을 종료했는데, 사용자가 스스로

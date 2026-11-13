@@ -10,7 +10,7 @@
 import pytest
 
 from usage_widget import main
-from usage_widget.fetcher import SessionExpiredError
+from usage_widget.fetcher import AccountInfo, SessionExpiredError
 
 
 class _FakeIcon:
@@ -23,10 +23,10 @@ def fresh_state(monkeypatch):
     monkeypatch.setattr(main, "_logged_out", False)
     monkeypatch.setattr(main, "_latest_usage", None)
     monkeypatch.setattr(main, "_last_error", None)
-    monkeypatch.setattr(main, "_account_email", None)
+    monkeypatch.setattr(main, "_account_info", None)
     monkeypatch.setattr(main, "_update_icon", lambda icon: None)
     monkeypatch.setattr(main, "push_usage_update", lambda usage: None)
-    monkeypatch.setattr(main, "fetch_account_email", lambda: "someone@example.com")
+    monkeypatch.setattr(main, "fetch_account_info", lambda: AccountInfo(email="someone@example.com"))
 
 
 def _expired():

@@ -33,7 +33,7 @@ from webview.window import FixPoint
 
 from usage_widget import autostart, i18n
 from usage_widget.config import DEFAULT_THEME, THEMES, Config
-from usage_widget.fetcher import LimitInfo, UsageData
+from usage_widget.fetcher import AccountInfo, LimitInfo, UsageData
 from usage_widget.tray_icon import DEFAULT_STYLE, STYLES, build_icon_image
 
 _ASSET_DIR = Path(__file__).parent / "assets" / "web"
@@ -325,6 +325,41 @@ def _round_corners(window: webview.Window, radius: int = _PANEL_RADIUS) -> None:
     window.events.resized += apply
 
 
+def _force_foreground(window: webview.Window) -> None:
+    """팝업 창을 pystray 콜백에서 바로 만들지 않고 항상 별도의 백그라운드
+    스레드로 감싸서 만드는데(main.py의 스레딩 설명 참고), Windows 입장에서는
+    이게 "포그라운드(foreground)에 떠 있지 않은 프로세스가 갑자기 새 창을
+    띄운" 것으로 보인다. on_top=True라 화면에는 맨 위로 보이지만, 실제
+    키보드 입력 포커스는 그대로 이전 창(예: 방금까지 쓰던 에디터)에 남아있는
+    경우가 있었다 -- 그래서 팝업이 뜨자마자 ESC를 눌러도 안 먹히고, 팝업
+    안을 한 번 클릭해서 포커스를 직접 넘겨줘야만 먹혔다.
+
+    이걸 SetForegroundWindow로 바로 고치려고 하면, Windows가 "포그라운드를
+    뺏으려는 백그라운드 프로세스"로부터 사용자를 보호하려고 일부러 막아버려서
+    조용히 실패한다. 표준 우회법은 지금 포그라운드를 들고 있는 창의 입력
+    스레드에 우리 스레드를 잠깐 "붙였다(AttachThreadInput)" 떼는 것이다 --
+    이러면 Windows가 두 스레드를 "같은 입력을 다루는 사이"로 보고
+    SetForegroundWindow를 허용해준다."""
+    if not _IS_WINDOWS:
+        return
+
+    def apply(*_args):
+        try:
+            user32 = ctypes.windll.user32
+            hwnd = window.native.Handle.ToInt32()
+            fg_hwnd = user32.GetForegroundWindow()
+            fg_pid = ctypes.c_ulong()
+            fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, ctypes.byref(fg_pid))
+            cur_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+            user32.AttachThreadInput(cur_thread, fg_thread, True)
+            user32.SetForegroundWindow(hwnd)
+            user32.AttachThreadInput(cur_thread, fg_thread, False)
+        except Exception:
+            pass
+
+    window.events.shown += apply
+
+
 _GWL_EXSTYLE = -20
 _WS_EX_LAYERED = 0x00080000
 _LWA_ALPHA = 0x2
@@ -459,6 +494,7 @@ def _new_window(title: str, page: str, js_api, width: int, height: int, position
         background_color=background,
     )
     _round_corners(window)
+    _force_foreground(window)
     return window
 
 
@@ -958,10 +994,10 @@ def show_settings_popup(on_saved: Optional[Callable[[], None]] = None) -> None:
 
 class _AccountApi:
     def __init__(
-        self, email: Optional[str], is_logged_out: bool, on_switch: Callable, on_logout: Callable,
+        self, account_info: Optional[AccountInfo], is_logged_out: bool, on_switch: Callable, on_logout: Callable,
         close_fn: Callable[[], None], resize_fn: Callable[[float, float], None], lang: str,
     ):
-        self._email = email
+        self._account_info = account_info
         self._is_logged_out = is_logged_out
         self._on_switch = on_switch
         self._on_logout = on_logout
@@ -970,8 +1006,11 @@ class _AccountApi:
         self._lang = lang
 
     def get_initial_data(self) -> dict:
+        info = self._account_info
         return {
-            "email": self._email,
+            "email": info.email if info else None,
+            "name": info.name if info else None,
+            "organization": info.organization if info else None,
             "is_logged_out": self._is_logged_out,
             "language": self._lang,
             "theme": Config.load().theme,
@@ -990,7 +1029,9 @@ class _AccountApi:
         self._resize_fn(dw, dh)
 
 
-def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch: Callable, on_logout: Callable) -> None:
+def show_account_popup(
+    account_info: Optional[AccountInfo], is_logged_out: bool, on_switch: Callable, on_logout: Callable
+) -> None:
     """뭔가 되돌리기 어려운 동작을 하기 전에, 지금 어느 계정이 활성 상태인지
     먼저 확인시켜준다 -- 아래 두 버튼 모두 저장된 세션을 지워버리기 때문에,
     메뉴 클릭에 곧바로 반응해서 실행하는 대신 이 화면을 먼저 보여주면
@@ -999,10 +1040,15 @@ def show_account_popup(email: Optional[str], is_logged_out: bool, on_switch: Cal
 
     def create() -> webview.Window:
         box: list = []
-        width, height = 320, 300
+        # 이름/소속 조직까지 보여주도록 카드를 채우면서(13.x대 개선) 내용이
+        # 늘어나, 예전 높이(300)로는 스크롤이 생겼다 -- 헤드리스 렌더링으로
+        # 실측한 필요 높이(약 340)에 여유를 두고 350으로 키움.
+        width, height = 320, 350
         size = [width, height]
         lang = Config.load().language
-        api = _AccountApi(email, is_logged_out, on_switch, on_logout, _box_closer(box), _box_resizer(box, size), lang)
+        api = _AccountApi(
+            account_info, is_logged_out, on_switch, on_logout, _box_closer(box), _box_resizer(box, size), lang
+        )
         window = _new_window(i18n.t("tray.account", lang), "account.html", api, width, height, _position_centered(width, height))
         box.append(window)
         return window

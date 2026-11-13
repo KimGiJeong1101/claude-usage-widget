@@ -76,3 +76,17 @@ window.__applyTheme = applyTheme;
 setTimeout(() => {
   document.documentElement.dataset.themeReady = "1";
 }, 1500);
+
+// ESC 키로 팝업 닫기. 오른쪽 위 닫기 버튼과 똑같이 그냥 js_api.close()를
+// 부르는 것뿐이라, 사용량 팝업의 "핀 고정"(마우스가 벗어나도 안 닫힘) 상태
+// 여부와 상관없이 항상 닫힌다 -- 핀 고정은 마우스가 벗어나는 것 같은
+// 우발적인 상황에서 안 닫히게 하려고 만든 기능이고, ESC는 사용자가 명확히
+// "닫고 싶다"고 누른 것이라 성격이 다르다고 보고 일부러 구분했다. 스플래시
+// 화면처럼 close()가 아예 없는 페이지도 이 스크립트를 같이 불러 쓰므로,
+// 그런 페이지에서 에러가 나지 않도록 close가 실제로 있는지부터 확인한다.
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape") return;
+  if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.close === "function") {
+    window.pywebview.api.close();
+  }
+});

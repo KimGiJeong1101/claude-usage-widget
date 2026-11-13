@@ -23,7 +23,7 @@ from usage_widget.paths import session_state_path
 API_BASE = "https://claude.ai/api/organizations"
 BOOTSTRAP_ENDPOINT = "https://claude.ai/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk"
 
-# 이 파일의 두 함수(fetch_usage/fetch_account_email)는 호출될 때마다 headless
+# 이 파일의 두 함수(fetch_usage/fetch_account_info)는 호출될 때마다 headless
 # Chrome을 매번 새로 하나씩 띄운다. 그런데 이 앱은 백그라운드 자동 갱신
 # 스레드(main.py의 _refresh_loop, 기본 60초 주기)와 사용자가 팝업에서
 # 직접 누르는 수동 새로고침이 서로 다른 스레드에서 언제든 동시에 실행될 수
@@ -80,6 +80,17 @@ class LimitInfo:
     resets_at: Optional[datetime]
     model: Optional[str] = None
     is_active: bool = False
+
+
+@dataclass
+class AccountInfo:
+    """계정 팝업에 보여줄 신원 정보. email만 필수로 보장된 값이고, name/
+    organization은 계정 설정에 따라 없을 수도 있어서(예: 소속 조직 없이
+    혼자 쓰는 개인 워크스페이스) 둘 다 Optional로 다룬다."""
+
+    email: str
+    name: Optional[str] = None
+    organization: Optional[str] = None
 
 
 @dataclass
@@ -188,13 +199,18 @@ def _parse_limits(raw) -> List[LimitInfo]:
     return limits
 
 
-def fetch_account_email() -> str:
+def fetch_account_info() -> AccountInfo:
     """claude.ai 웹앱이 맨 처음 로딩될 때 자기가 직접 호출하는 API 주소다
     (claude.ai 자체 코드 안에서 apiPrefix + "/bootstrap"라는 이름으로
     쓰이는 걸 확인해서 그대로 가져다 씀). 이 주소를 호출하면 계정 정보를
-    이것저것 돌려주는데, 그 안에 지금 로그인된 세션이 누구 계정인지 이메일
-    주소가 들어있어서, "계정" 팝업에서 현재 로그인된 사람이 누구인지 보여줄
-    때 이 값을 쓴다."""
+    이것저것 돌려주는데, 그 안에 지금 로그인된 세션이 누구 계정인지(이름,
+    이메일, 소속 조직)가 들어있어서, "계정" 팝업에서 현재 로그인된 사람이
+    누구인지 보여줄 때 이 값들을 쓴다.
+
+    응답 안에는 이 밖에도 feature flag 같은 내부용 값들이 잔뜩 들어있는데,
+    그런 건 Anthropic이 예고 없이 수시로 바꿀 수 있는 값들이라 믿고 화면에
+    보여줄 만한 게 못 된다. 그래서 그런대로 안정적으로 보이는 이름/이메일/
+    소속 조직 이름, 이 세 개만 꺼내 쓴다."""
     if not session_state_path().exists():
         raise SessionExpiredError("no saved session")
 
@@ -208,7 +224,17 @@ def fetch_account_email() -> str:
         finally:
             browser.close()
 
-    return data["account"]["email_address"]
+    account = data["account"]
+    # 첫 번째로 속한 조직만 쓴다 -- fetch_usage()가 조직을 고를 때와 같은
+    # 이유로, 여러 조직에 속한 계정을 제대로 가려낼 방법이 없어서 그냥
+    # 첫 번째 것으로 단순하게 처리해둔다.
+    memberships = account.get("memberships") or []
+    organization = (memberships[0].get("organization") or {}).get("name") if memberships else None
+    return AccountInfo(
+        email=account["email_address"],
+        name=account.get("full_name") or account.get("display_name") or None,
+        organization=organization,
+    )
 
 
 def fetch_usage_mock() -> UsageData:
