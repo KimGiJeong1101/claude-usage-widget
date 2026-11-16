@@ -29,7 +29,7 @@ from typing import Callable, Optional
 import pystray
 
 from usage_widget import __version__, autostart, i18n, single_instance
-from usage_widget.auth import has_saved_session, login_and_save_session
+from usage_widget.auth import LOGIN_TIMEOUT_SECONDS, has_saved_session, login_and_save_session
 from usage_widget.config import DEFAULT_REFRESH_SECONDS, Config
 from usage_widget.fetcher import SessionExpiredError, UsageData, browser_launch_lock, fetch_account_info, fetch_usage
 from usage_widget.paths import session_state_path
@@ -108,6 +108,21 @@ _LIMIT_ALERT_THRESHOLDS = (80, 90)
 # 조금씩 달라져서, 그걸 키로 쓰면 같은 한도가 매번 새 한도로 보여 알림이
 # 반복될 수 있다.
 _limit_alert_levels: dict = {}
+
+
+def _notify_relogin_needed(icon: pystray.Icon) -> None:
+    """백그라운드 갱신 중 세션이 만료돼서 재로그인 창을 띄우기 직전에 알린다.
+    자리를 비운 사이(주말 등) 뜬 로그인 창은 다른 창 뒤에 숨어 있기 쉬워서,
+    위젯이 왜 멈춰 있는지 알 수 없었다. 이 창은 LOGIN_TIMEOUT_SECONDS가 지나면
+    저절로 닫히고 위젯은 로그아웃(일시정지) 상태가 된다."""
+    try:
+        lang = Config.load().language
+        icon.notify(
+            i18n.t("notify.relogin_msg", lang, minutes=LOGIN_TIMEOUT_SECONDS // 60),
+            i18n.t("notify.relogin_title", lang),
+        )
+    except Exception:
+        pass
 
 
 def _notify_limit_thresholds(icon: pystray.Icon, usage: UsageData) -> None:
@@ -199,7 +214,7 @@ def _refresh_loop(icon: pystray.Icon) -> None:
             config = Config.load()
             if not _logged_out:
                 try:
-                    _latest_usage = _fetch_with_relogin()
+                    _latest_usage = _fetch_with_relogin(before_login=lambda: _notify_relogin_needed(icon))
                     _last_error = None
                     push_usage_update(_latest_usage)
                     _notify_limit_thresholds(icon, _latest_usage)

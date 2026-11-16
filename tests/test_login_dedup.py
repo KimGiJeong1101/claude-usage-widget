@@ -102,3 +102,44 @@ def test_stale_session_file_still_triggers_relogin(tmp_path, monkeypatch):
 
     assert launch_counter[0] == 1, "낡은 세션 파일이 있을 때 재로그인이 스킵됐다 (회귀)"
     assert "fresh" in session_file.read_text(), "세션 파일이 새로 갱신되지 않았다"
+
+
+def test_login_window_closes_itself_after_timeout(tmp_path, monkeypatch):
+    """로그인 창을 아무도 안 쓰고 방치하면(주말에 자리를 비운 사이 세션이
+    만료된 경우 등), 제한 시간 뒤에 창을 닫고 False("로그인 안 함")를 돌려줘야
+    한다. 예전엔 제한이 없어서 이 창이 browser_launch_lock을 영원히 붙잡고
+    있었고, 그동안 자동 갱신과 새로고침이 전부 멈춰 있었다."""
+    closed = []
+
+    class _NeverLoggedInContext(_FakeContext):
+        def cookies(self):
+            return []  # 아무도 로그인하지 않음
+
+    class _Browser:
+        def new_context(self, viewport=None):
+            return _NeverLoggedInContext()
+
+        def close(self):
+            closed.append(True)
+
+    class _Chromium:
+        def launch(self, headless, channel, args=None):
+            return _Browser()
+
+    class _Playwright:
+        chromium = _Chromium()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+    session_file = tmp_path / "session_state.json"
+    monkeypatch.setattr(auth, "sync_playwright", _Playwright)
+    monkeypatch.setattr(auth, "session_state_path", lambda: session_file)
+    monkeypatch.setattr(auth, "LOGIN_TIMEOUT_SECONDS", 0)  # 테스트에선 바로 시간 초과
+
+    assert auth.login_and_save_session() is False
+    assert closed == [True], "시간 초과 후 로그인 창(브라우저)을 닫지 않았다"
+    assert not session_file.exists(), "로그인을 안 했는데 세션 파일이 생겼다"

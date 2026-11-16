@@ -14,6 +14,12 @@ from usage_widget.paths import session_state_path
 USAGE_URL = "https://claude.ai/settings/usage"
 SESSION_COOKIE_NAME = "sessionKey"
 
+# 로그인 창을 이 시간 안에 끝내지 않으면 창을 닫고 "로그인 안 함"으로 끝낸다.
+# 예전엔 제한이 없어서, 주말처럼 자리를 비운 사이 세션이 만료되면 로그인 창이
+# (다른 창 뒤에 숨은 채로) 계속 떠 있었고, 그동안 browser_launch_lock을 붙잡고
+# 있어서 자동 갱신과 새로고침(⟳)까지 전부 멈춰 있었다.
+LOGIN_TIMEOUT_SECONDS = 10 * 60
+
 
 def _has_session_cookie(context) -> bool:
     return any(c["name"] == SESSION_COOKIE_NAME for c in context.cookies())
@@ -25,7 +31,8 @@ def login_and_save_session() -> bool:
     session_state_path()가 가리키는 파일에 저장한다.
 
     로그인이 끝나서 새 세션이 저장됐으면 True, 사용자가 로그인을 끝내지
-    않고 창을 닫아버렸으면 False를 돌려준다. "세션 파일이 있는지"만 보고는
+    않고 창을 닫아버렸거나 LOGIN_TIMEOUT_SECONDS 안에 로그인하지 않았으면
+    False를 돌려준다. "세션 파일이 있는지"만 보고는
     이 둘을 구분할 수 없다 -- 세션이 만료돼서 불린 경우엔 낡은 세션 파일이
     그대로 남아있기 때문이다. 이걸 구분 못 하면, 호출하는 쪽이 "창을
     닫았다"를 "아직 로그인이 안 됐다"로 착각하고 로그인 창을 또 띄우게
@@ -73,8 +80,11 @@ def login_and_save_session() -> bool:
                 # 시점엔 로그인 여부와 상관없이 이미 주소는 USAGE_URL이라 URL만
                 # 봐서는 구분이 안 되고, 로그인하는 동안 여러 중간 화면을 거쳐갈 수도
                 # 있기 때문이다.
+                deadline = time.monotonic() + LOGIN_TIMEOUT_SECONDS
                 try:
                     while not _has_session_cookie(context):
+                        if time.monotonic() >= deadline:
+                            return False  # 시간 안에 로그인 안 함 -- 아래 finally가 창을 닫는다
                         time.sleep(1)
                 except Exception:
                     return False  # 로그인이 끝나기 전에 사용자가 브라우저 창을 닫아버린 경우

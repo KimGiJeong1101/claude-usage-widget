@@ -84,3 +84,22 @@ def test_before_login_hook_runs_before_login_window(monkeypatch, fresh_state):
 
     assert result == "usage"
     assert order == ["close_splash", "login"], "스플래시가 로그인 창보다 먼저 닫히지 않았다"
+
+
+def test_background_relogin_shows_tray_notification(monkeypatch, fresh_state):
+    """자리를 비운 사이 뜬 재로그인 창은 다른 창 뒤에 숨기 쉬워서, 창을 띄우기
+    직전에 트레이 알림으로 알려야 한다(몇 분 뒤 자동으로 닫힌다는 안내 포함)."""
+
+    class _NotifyingIcon(_FakeIcon):
+        def __init__(self):
+            self.notifications = []
+
+        def notify(self, message, title):
+            self.notifications.append((title, message))
+
+    icon = _NotifyingIcon()
+    main._notify_relogin_needed(icon)
+
+    assert len(icon.notifications) == 1
+    title, message = icon.notifications[0]
+    assert str(main.LOGIN_TIMEOUT_SECONDS // 60) in message
