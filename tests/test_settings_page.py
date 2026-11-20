@@ -49,13 +49,28 @@ def browser():
         browser.close()
 
 
-@pytest.fixture
-def page(browser):
+def _open_settings(browser, show_autostart=False):
     page = browser.new_page()
-    page.add_init_script(_FAKE_API)
+    fake_api = _FAKE_API
+    if show_autostart:  # Windows에서만 보이는 "PC 시작 시 자동 실행" 줄
+        fake_api = fake_api.replace("show_autostart: false", "show_autostart: true")
+    page.add_init_script(fake_api)
     page.goto(SETTINGS_PAGE.as_uri())
     page.evaluate("window.dispatchEvent(new Event('pywebviewready'))")
     page.wait_for_function("document.querySelectorAll('#language-select option').length > 0")
+    return page
+
+
+@pytest.fixture
+def page(browser):
+    page = _open_settings(browser)
+    yield page
+    page.close()
+
+
+@pytest.fixture
+def page_with_autostart(browser):
+    page = _open_settings(browser, show_autostart=True)
     yield page
     page.close()
 
@@ -101,3 +116,16 @@ def test_huge_refresh_interval_is_capped_at_one_day(page):
 
     assert page.input_value("#interval") == "86400"
     assert page.evaluate("window.__lastPayload.refresh_seconds") == 86400
+
+
+def test_autostart_is_sent_only_when_its_switch_changes(page_with_autostart):
+    # 예전엔 테마만 바꿔도 자동 실행 값을 같이 보내서 레지스트리를 다시 썼다 -- 소스로
+    # 실행 중인 개발 PC에서는 exe로 등록된 자동 실행이 python 명령으로 바뀌었다.
+    page = page_with_autostart
+    _change_theme(page, "dark")
+    assert "autostart" not in page.evaluate("window.__lastPayload")
+
+    calls_before = page.evaluate("window.__saveCalls")
+    page.click("#autostart")
+    page.wait_for_function(f"window.__saveCalls > {calls_before}")
+    assert page.evaluate("window.__lastPayload.autostart") is True

@@ -162,16 +162,18 @@
   // 버튼 한 줄을 없애려고 바꿨다. 매번 화면의 현재 값 전체를 보내지만, Python
   // 쪽(_SettingsApi.save)이 파일의 최신 값 위에 이 팝업 담당 필드만 덮어써서
   // 다른 팝업이 저장한 값(투명도 등)은 그대로 남는다.
-  async function saveNow() {
+  async function saveNow(includeAutostart = false) {
     const payload = {
       refresh_seconds: lastValidInterval,
       tray_icon_style: styleSelect.value,
       language: languageSelect.value,
       theme: themeSelect.value,
     };
-    // 자동 실행은 Windows에서만 보이는 항목이라, 안 보이는 환경에서는 아예 보내지
-    // 않는다(보내면 Python이 "끄기"로 받아들여 레지스트리를 건드린다).
-    if (showAutostart) payload.autostart = autostartCheckbox.checked;
+    // 자동 실행 값은 그 스위치를 바꿨을 때만 보낸다 -- 보내면 Python이 레지스트리를
+    // 다시 쓰는데, 테마만 바꿔도 그러면 소스로 실행 중인 개발 PC에서는 exe로 등록된
+    // 자동 실행이 python 명령으로 바뀌었다. 안 보이는 환경(Windows 외)에서는 아예
+    // 보내지 않는다(보내면 Python이 "끄기"로 받아들여 레지스트리를 건드린다).
+    if (includeAutostart && showAutostart) payload.autostart = autostartCheckbox.checked;
     try {
       await window.pywebview.api.save(payload);
       showSaveResult(true);
@@ -230,7 +232,7 @@
     paintStylePreview();
     saveNow();
   });
-  autostartCheckbox.addEventListener("change", saveNow);
+  autostartCheckbox.addEventListener("change", () => saveNow(true));
 
   // 숫자는 한 글자 칠 때마다 저장하면 "6"(6초)처럼 중간값이 저장되므로, 입력칸을
   // 벗어나거나 엔터를 쳤을 때("change") 한 번만 저장한다. 비었거나 이상한 값이면
