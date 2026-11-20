@@ -43,16 +43,13 @@ def check_for_update() -> Optional[str]:
     버전이 지금 실행 중인 버전보다 진짜로 더 새로울 때만. 더 새롭지
     않으면 None을 돌려준다.
 
-    확인 과정에서 뭔가 잘못돼도(인터넷 연결 안 됨, 깃허브 API 요청 횟수
-    제한에 걸림, 예상과 다른 응답이 옴 등) 마찬가지로 None을 돌려준다.
-    이렇게 해두면, 확인 과정 자체가 실패했을 때 "새 버전이 있다"고 잘못
-    알려주는 일은 절대 없다."""
-    try:
-        response = httpx.get(_API_URL, timeout=10, follow_redirects=True)
-        response.raise_for_status()
-        tag = response.json()["tag_name"]
-    except Exception:
-        return None
+    확인 과정에서 뭔가 잘못되면(인터넷 연결 안 됨, 깃허브 API 요청 횟수
+    제한에 걸림, 예상과 다른 응답이 옴 등) 예외를 그대로 올린다. 예전엔
+    이것도 None으로 돌려줬는데, 그러면 트레이 메뉴의 수동 확인이 실패를
+    "최신 버전입니다"로 알려줬다."""
+    response = httpx.get(_API_URL, timeout=10, follow_redirects=True)
+    response.raise_for_status()
+    tag = response.json()["tag_name"]
 
     latest = _parse_version(tag)
     current = _parse_version(__version__)

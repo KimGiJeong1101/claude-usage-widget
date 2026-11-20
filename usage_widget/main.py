@@ -497,7 +497,13 @@ def _on_update_click(icon: pystray.Icon, item) -> None:
     def worker():
         global _update_available_version, _update_checking
         lang = Config.load().language
-        version = check_for_update()
+        try:
+            version = check_for_update()
+        except Exception:
+            _update_checking = False
+            icon.update_menu()
+            icon.notify(i18n.t("notify.check_failed_msg", lang), i18n.t("notify.check_title", lang))
+            return
         _update_checking = False
         if version is None:
             icon.update_menu()
@@ -519,12 +525,11 @@ def _update_check_loop(icon: pystray.Icon) -> None:
     while True:
         try:
             version = check_for_update()
-            # check_for_update()는 "최신 버전임"과 "확인 자체가 실패함(네트워크
-            # 끊김 등)"을 둘 다 None으로 돌려준다. 그래서 None일 때 그대로
-            # 덮어쓰면, 이미 찾아둔 새 버전 정보가 확인에 한 번 실패한 것만으로
-            # 사라져서 메뉴가 "현재 버전"으로 되돌아가 버린다. 실행 중에 이미
-            # 알게 된 새 버전이 다시 "없던 일"이 될 수는 없으니, 새 버전을
-            # 찾았을 때만 갱신한다.
+            # 확인이 실패하면 check_for_update()가 예외를 올려 아래 except로
+            # 가므로, 이미 찾아둔 새 버전 정보는 그대로 남는다. None("최신
+            # 버전임")일 때도 덮어쓰지 않는다 -- 실행 중에 이미 알게 된 새
+            # 버전이 다시 "없던 일"이 될 수는 없으니, 새 버전을 찾았을 때만
+            # 갱신한다.
             if version is not None:
                 _update_available_version = version
             if version is not None and version not in _update_notified_versions:
