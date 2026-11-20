@@ -950,7 +950,9 @@ class _SettingsApi:
         # 바로 그 순간에 투명도 저장이 겹쳐도 어느 한쪽 값이 사라지지 않는다.
         def mutate(config: Config) -> None:
             try:
-                config.refresh_seconds = max(5, int(payload.get("refresh_seconds", config.refresh_seconds)))
+                # 상한 1일: 너무 큰 값(약 49.7일 초과)은 main.py 갱신 루프의 대기에서
+                # 오류가 나 조용히 60초 주기로 돌았다. settings.html도 같은 값으로 막는다.
+                config.refresh_seconds = min(86400, max(5, int(payload.get("refresh_seconds", config.refresh_seconds))))
             except (TypeError, ValueError):
                 pass
             config.tray_icon_style = payload.get("tray_icon_style") or DEFAULT_STYLE

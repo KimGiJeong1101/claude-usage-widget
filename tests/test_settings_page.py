@@ -29,8 +29,9 @@ window.pywebview = {
       show_autostart: false,
       autostart_enabled: false,
     }),
-    save: async () => {
+    save: async (payload) => {
       window.__saveCalls += 1;
+      window.__lastPayload = payload;
       if (window.__saveShouldFail) throw new Error("registry access denied");
     },
     close: () => {},
@@ -90,3 +91,13 @@ def test_failure_message_follows_language_change(page):
     page.wait_for_function("document.getElementById('autosave-hint').classList.contains('failed')")
 
     assert page.locator("#autosave-hint").text_content() == "Some changes couldn't be saved. Please try again."
+
+
+def test_huge_refresh_interval_is_capped_at_one_day(page):
+    # 파이썬(webui.py)도 1일로 막지만, 화면 숫자가 따로 놀지 않게 입력칸도 맞춘다.
+    page.fill("#interval", "5000000")
+    page.press("#interval", "Enter")
+    page.wait_for_function("window.__saveCalls > 0")
+
+    assert page.input_value("#interval") == "86400"
+    assert page.evaluate("window.__lastPayload.refresh_seconds") == 86400

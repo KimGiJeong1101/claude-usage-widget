@@ -146,3 +146,17 @@ def test_settings_save_without_autostart_value_does_not_touch_registry(tmp_path,
 
     api.save({"theme": "dark", "language": "ko", "tray_icon_style": "donut", "refresh_seconds": 60, "autostart": False})
     assert calls == ["disable"]
+
+
+def test_settings_save_caps_refresh_interval_at_one_day(tmp_path, monkeypatch):
+    """예전엔 상한이 없어서, 대기 함수가 받을 수 있는 최대값(약 49.7일)을 넘으면
+    갱신 루프가 오류를 내고 조용히 60초 주기로 돌았다."""
+    from usage_widget import webui
+
+    monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
+    monkeypatch.setattr(webui, "_IS_WINDOWS", False)
+    monkeypatch.setattr(webui, "_push_theme_to_open_popups", lambda theme: None)
+
+    api = webui._SettingsApi(config_mod.Config.load(), on_saved=None, close_fn=lambda: None, resize_fn=lambda dw, dh: None)
+    api.save({"refresh_seconds": 5000000})
+    assert config_mod.Config.load().refresh_seconds == 86400
