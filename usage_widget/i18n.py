@@ -66,7 +66,6 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "notify.limit_msg": "{label} 한도 — {reset}",
         "notify.relogin_title": "다시 로그인이 필요합니다",
         "notify.relogin_msg": "열린 Chrome 창에서 claude.ai에 로그인해 주세요. {minutes}분 안에 로그인하지 않으면 창을 닫고 갱신을 멈춥니다.",
-        "splash.status": "실행 중입니다...",
     },
     "en": {
         "tray.open": "Open",
@@ -112,7 +111,6 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "notify.limit_msg": "{label} — {reset}",
         "notify.relogin_title": "Please sign in again",
         "notify.relogin_msg": "Sign in to claude.ai in the Chrome window that opened. If you don't sign in within {minutes} minutes, the window will close and refreshing will pause.",
-        "splash.status": "Starting...",
     },
     "ja": {
         "tray.open": "開く",
@@ -158,7 +156,6 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "notify.limit_msg": "{label}の上限 — {reset}",
         "notify.relogin_title": "再ログインが必要です",
         "notify.relogin_msg": "開いたChromeウィンドウでclaude.aiにログインしてください。{minutes}分以内にログインしないとウィンドウを閉じて更新を停止します。",
-        "splash.status": "起動しています...",
     },
     "zh-CN": {
         "tray.open": "打开",
@@ -204,7 +201,6 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "notify.limit_msg": "{label}限额 — {reset}",
         "notify.relogin_title": "需要重新登录",
         "notify.relogin_msg": "请在打开的 Chrome 窗口中登录 claude.ai。若{minutes}分钟内未登录，窗口将关闭并暂停刷新。",
-        "splash.status": "正在启动...",
     },
 }
 

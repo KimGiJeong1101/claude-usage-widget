@@ -480,7 +480,7 @@ def _start_update(icon: pystray.Icon) -> None:
 
 
 def _on_update_click(icon: pystray.Icon, item) -> None:
-    global _update_available_version, _update_checking
+    global _update_checking
 
     if _update_in_progress or _update_checking:
         return

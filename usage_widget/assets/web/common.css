@@ -40,7 +40,6 @@
      원래 노랑도 잘 보여서 그대로 씀). */
   --yellow-text: #c4860c;
   --red: #ef4444;
-  --danger-hover: #d94b4b;
   --radius: 20px;
   color-scheme: light;
 }
@@ -255,25 +254,6 @@ html:not([data-theme-ready]) .panel {
   box-shadow: 0 1px 2px var(--card-shadow);
 }
 
-.field-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  margin: 0 0 10px;
-}
-
-.field-label::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  flex: none;
-}
-
 .muted {
   color: var(--muted);
   font-size: 11px;
@@ -318,7 +298,6 @@ button:active {
   transform: scale(0.98) translateY(0);
 }
 
-input[type="text"],
 input[type="number"],
 select {
   font-family: inherit;
@@ -342,7 +321,6 @@ select option {
   color: var(--text);
 }
 
-input[type="text"]:focus,
 input[type="number"]:focus,
 select:focus {
   outline: none;
@@ -358,19 +336,6 @@ select {
   background-position: right 10px center;
   background-size: 14px;
   padding-right: 30px;
-}
-
-.checkbox-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.checkbox-row input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
 }
 
 .resize-grip {
