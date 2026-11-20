@@ -167,7 +167,7 @@ def _relaunch_script_path_for(exe: Path) -> Path:
     return exe.with_name("_update_relaunch.bat")
 
 
-def cleanup_stale_update_files() -> None:
+def cleanup_stale_update_files() -> bool:
     """업데이트가 중간에 끊긴 경우(예: 새 파일을 임시로 저장해뒀는데 재시작
     도우미가 실제로 파일을 바꿔치기하기 전에 앱이 강제 종료된 경우) 남아있는
     찌꺼기 파일들을 지운다. 프로그램을 시작할 때 한 번 호출하도록 만든,
@@ -179,16 +179,23 @@ def cleanup_stale_update_files() -> None:
     남는 문제가 있었는데(자세한 사연은 apply_update()의 설명 참고), 그 버그를
     이미 겪었던 사람이 업데이트를 안 했다면 이 파일이 영원히 남아있게 된다.
     (빌드 시점에 이미 굳어진 옛날 코드는, 나중에 새로 생긴 파일 이름 규칙을
-    알 방법이 없으니 이렇게 새 코드 쪽에서 챙겨줘야 한다.)"""
+    알 방법이 없으니 이렇게 새 코드 쪽에서 챙겨줘야 한다.)
+
+    새 파일(X.new.exe)이 남아 있었으면 True를 돌려준다 -- 재시작 도우미의 move가
+    실패해(예: 백신이 새 파일을 잡고 있음) 옛 exe가 그대로 다시 실행됐다는 뜻이다.
+    예전엔 이걸 조용히 지워서, 사용자는 업데이트된 줄 알았다."""
     if not is_frozen():
-        return
+        return False
     current = _current_exe_path()
+    staged = _staged_path_for(current)
+    update_not_applied = staged.exists()
     legacy_old = current.with_name(current.name + ".old")
-    for path in (_staged_path_for(current), _relaunch_script_path_for(current), legacy_old):
+    for path in (staged, _relaunch_script_path_for(current), legacy_old):
         try:
             path.unlink(missing_ok=True)
         except Exception:
             pass
+    return update_not_applied
 
 
 def _download_new_exe() -> bytes:

@@ -56,6 +56,9 @@ _UPDATE_CHECK_INTERVAL_SECONDS = 6 * 60 * 60
 
 _update_available_version: Optional[str] = None
 _update_notified_versions: set = set()
+# 직전 자동 업데이트가 적용되지 않고 옛 버전이 다시 실행됐는지 -- 시작할 때
+# cleanup_stale_update_files()가 알려주고, 트레이가 뜨면 알림으로 알린다.
+_previous_update_failed = False
 
 _latest_usage = None
 _last_error = None
@@ -569,7 +572,10 @@ def _announce_started(icon: pystray.Icon) -> None:
     icon.visible = True
     try:
         lang = Config.load().language
-        icon.notify(i18n.t("notify.started_msg", lang), i18n.t("tray.tooltip_base", lang))
+        if _previous_update_failed:
+            icon.notify(i18n.t("notify.update_apply_failed_msg", lang), i18n.t("notify.update_failed_title", lang))
+        else:
+            icon.notify(i18n.t("notify.started_msg", lang), i18n.t("tray.tooltip_base", lang))
     except Exception:
         pass
 
@@ -699,7 +705,7 @@ def run() -> None:
     실제로 화면에 그려지게 한다 (webview.create_window()/destroy()는
     메인 스레드가 아닌 다른 스레드에서 불러도 안전하다고 공식적으로
     문서화돼 있다 -- webui.py 맨 위 설명 참고)."""
-    global _latest_usage
+    global _latest_usage, _previous_update_failed
     if not single_instance.acquire():
         # 이미 다른 인스턴스(같은 프로그램의 다른 실행 중인 복사본)가 이
         # 잠금을 갖고 있다는 뜻이다 -- exe를 두 번 실행하면(습관적으로 다시
@@ -714,7 +720,7 @@ def run() -> None:
         # 띄워줘도 이유를 알려주기엔 충분하다.
         _notify_already_running()
         return
-    cleanup_stale_update_files()
+    _previous_update_failed = cleanup_stale_update_files()
     autostart.refresh_registered_path()
 
     init_gui()
