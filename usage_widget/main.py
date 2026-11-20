@@ -646,6 +646,44 @@ def _notify_startup_failed(error: Exception) -> None:
         root.destroy()
 
 
+# 시작할 때 첫 조회가 일시적인 오류로 실패하면 이 간격(초)으로 다시 시도한다 --
+# 처음 시도까지 합쳐 최대 5번, 약 2분. 예전엔 한 번만 실패해도 앱이 꺼져서,
+# 자동 시작 직후 Wi-Fi가 아직 안 붙은 PC에서는 위젯이 꺼진 채로 남았다.
+_STARTUP_RETRY_DELAYS = (10, 20, 30, 60)
+
+
+def _initial_fetch(splash) -> UsageData:
+    """시작할 때 첫 사용량 조회. 저장된 세션이 없으면 로그인부터 한다."""
+    if not has_saved_session():
+        # 이제 곧 로그인을 위한 진짜 Chrome 브라우저 창이 통째로
+        # 뜰 예정이다 -- 그 밑에 작은 스플래시 화면이 계속 남아있을
+        # 이유가 없으니 먼저 닫는다.
+        close_splash(splash)
+        if not login_and_save_session():
+            raise _LoginCancelledError("login window closed before signing in")
+        # 방금 로그인을 끝냈으니 재로그인 로직 없이 바로 가져온다
+        # -- _fetch_with_relogin()을 쓰면, 혹시 여기서 실패했을 때
+        # 로그인 창이 곧바로 한 번 더 뜬다.
+        fetch = fetch_usage
+    else:
+        # 세션 파일은 있는데 만료된 경우에도 재로그인 창이 뜬다.
+        # 스플래시는 항상 위(on_top)에 화면 정중앙에 떠 있어서,
+        # 그대로 두면 로그인 화면 한가운데를 가려버린다 -- 로그인
+        # 창을 띄우기 직전에 닫는다.
+        fetch = lambda: _fetch_with_relogin(before_login=lambda: close_splash(splash))
+
+    for delay in _STARTUP_RETRY_DELAYS:
+        try:
+            return fetch()
+        except (_LoginCancelledError, SessionExpiredError):
+            # 로그인 창을 닫았거나 로그인 직후에도 세션이 거부된 경우 -- 다시
+            # 시도하면 로그인 창이 또 뜨므로 지금처럼 바로 넘긴다.
+            raise
+        except Exception:
+            time.sleep(delay)
+    return fetch()
+
+
 def run() -> None:
     """예전에는 pywebview의 이벤트 루프(run_gui_loop)가 시작되기도 전에,
     로그인 확인과 첫 사용량 조회를 메인 스레드에서 그대로 멈춰서 기다렸다
@@ -682,23 +720,7 @@ def run() -> None:
         global _latest_usage, _logged_out, _last_error
         try:
             try:
-                if not has_saved_session():
-                    # 이제 곧 로그인을 위한 진짜 Chrome 브라우저 창이 통째로
-                    # 뜰 예정이다 -- 그 밑에 작은 스플래시 화면이 계속 남아있을
-                    # 이유가 없으니 먼저 닫는다.
-                    close_splash(splash)
-                    if not login_and_save_session():
-                        raise _LoginCancelledError("login window closed before signing in")
-                    # 방금 로그인을 끝냈으니 재로그인 로직 없이 바로 가져온다
-                    # -- _fetch_with_relogin()을 쓰면, 혹시 여기서 실패했을 때
-                    # 로그인 창이 곧바로 한 번 더 뜬다.
-                    _latest_usage = fetch_usage()
-                else:
-                    # 세션 파일은 있는데 만료된 경우에도 재로그인 창이 뜬다.
-                    # 스플래시는 항상 위(on_top)에 화면 정중앙에 떠 있어서,
-                    # 그대로 두면 로그인 화면 한가운데를 가려버린다 -- 로그인
-                    # 창을 띄우기 직전에 닫는다.
-                    _latest_usage = _fetch_with_relogin(before_login=lambda: close_splash(splash))
+                _latest_usage = _initial_fetch(splash)
                 _refresh_account_info()
             except _LoginCancelledError as exc:
                 # 사용자가 로그인 창을 닫았다. 예전에는 이걸 "실행 실패"로
