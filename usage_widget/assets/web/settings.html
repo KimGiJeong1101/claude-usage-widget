@@ -51,6 +51,7 @@
   .style-preview { width: 22px; height: 22px; flex: none; }
   .autosave-hint { font-size: 11px; color: var(--muted); margin: 4px 4px 0; }
   .autosave-hint.saved { color: var(--green); }
+  .autosave-hint.failed { color: var(--red); }
 
   /* 체크박스를 토글 스위치 모양으로 -- 실제로는 그대로 <input type=checkbox>다. */
   .switch {
@@ -173,10 +174,21 @@
     if (showAutostart) payload.autostart = autostartCheckbox.checked;
     try {
       await window.pywebview.api.save(payload);
+      showSaveResult(true);
       flashSaved();
     } catch (e) {
       // 저장 실패(예: 레지스트리 권한 문제)해도 창이 먹통이 되면 안 된다.
+      showSaveResult(false);
     }
+  }
+
+  // 실패 문구는 다음 저장이 성공할 때까지 남겨 둔다 -- 잠깐 떴다 사라지면 놓친다.
+  // data-i18n 키 자체를 바꿔서, 그 사이에 언어를 바꿔도(applyI18n) 실패 문구가
+  // 원래 안내 문구로 덮이지 않게 한다.
+  function showSaveResult(ok) {
+    autosaveHint.dataset.i18n = ok ? "settings.autosave_hint" : "settings.autosave_failed";
+    autosaveHint.textContent = i18nText(languageSelect.value, autosaveHint.dataset.i18n);
+    autosaveHint.classList.toggle("failed", !ok);
   }
 
   // 안내 문구를 잠깐 초록색으로 -- "저장됐다"는 걸 버튼 없이도 알 수 있게.

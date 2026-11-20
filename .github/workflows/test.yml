@@ -18,12 +18,14 @@ on:
       - main
     paths:
       - "usage_widget/**.py"
+      - "usage_widget/assets/web/**"
       - "tests/**.py"
       - "pyproject.toml"
       - ".github/workflows/test.yml"
   pull_request:
     paths:
       - "usage_widget/**.py"
+      - "usage_widget/assets/web/**"
       - "tests/**.py"
       - "pyproject.toml"
       - ".github/workflows/test.yml"
@@ -43,6 +45,11 @@ jobs:
 
       - name: Install dependencies
         run: pip install -e ".[test]"
+
+      # tests/test_settings_page.py가 팝업 화면(assets/web)을 실제 브라우저로
+      # 띄워서 확인한다 -- Playwright에 딸린 Chromium을 받아둔다.
+      - name: Install Chromium for page tests
+        run: python -m playwright install chromium
 
       - name: Run tests
         run: pytest tests/ -v
