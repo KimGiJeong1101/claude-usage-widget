@@ -158,10 +158,10 @@ def fetch_usage() -> UsageData:
     # 시점의 첫 조회에서 나면 앱이 아예 실행되지 않는다.
     five_hour = data.get("five_hour") or {}
     seven_day = data.get("seven_day") or {}
-    session_percent = round(five_hour.get("utilization") or 0)
-    week_percent = round(seven_day.get("utilization") or 0)
-
     limits = _parse_limits(data.get("limits"))
+    session_percent = _tray_percent(data, "five_hour", limits, "session")
+    week_percent = _tray_percent(data, "seven_day", limits, "weekly_all")
+
     if not limits:
         # "limits" 목록이 없는 응답(예전 형식이거나 일부 요금제)이면, 원래
         # 보여주던 세션/주간 두 개만으로 대신 채운다.
@@ -170,6 +170,20 @@ def fetch_usage() -> UsageData:
             LimitInfo("weekly_all", week_percent, _parse_reset_at(seven_day.get("resets_at"))),
         ]
     return UsageData(session_percent=session_percent, week_percent=week_percent, limits=limits)
+
+
+def _tray_percent(data: dict, window_key: str, limits: List[LimitInfo], limit_kind: str) -> int:
+    """트레이 아이콘에 쓰는 대표 퍼센트. 구간 값이 null이면(아직 사용 전) 0%다.
+    구간 키 자체가 없으면 응답 형식이 바뀐 것이라, "limits" 목록의 같은 한도 값을
+    대신 쓴다(실제 응답에서 five_hour 사용률과 limits의 session 퍼센트는 같은 값).
+    둘 다 없으면 0%로 꾸며 보여주지 않고 오류로 올린다 -- 예전엔 0%로 보여서
+    트레이가 초록 0%로 멈추고 한도 알림도 오지 않는데 실패 표시는 없었다."""
+    if window_key in data:
+        return round((data[window_key] or {}).get("utilization") or 0)
+    for limit in limits:
+        if limit.kind == limit_kind:
+            return limit.percent
+    raise RuntimeError(f"usage response has neither {window_key} nor a {limit_kind} limit")
 
 
 def _parse_limits(raw) -> List[LimitInfo]:

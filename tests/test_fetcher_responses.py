@@ -119,3 +119,25 @@ def test_limits_list_is_read_as_is_including_model_scoped_limits(tmp_path, monke
         ("weekly_scoped", 9, "Fable", False),
     ]
     assert all(l.resets_at is not None for l in usage.limits)
+
+
+def test_response_without_usage_data_is_an_error(tmp_path, monkeypatch):
+    """키가 null인 것(아직 사용 전 -- 위 테스트)과 달리, 키 자체가 없으면 응답 형식이
+    바뀌었다는 뜻이다. 예전엔 이것도 0%로 보여줘서 트레이가 초록 0%로 멈추고 한도
+    알림도 오지 않았는데, 실패 표시는 아무 데도 없었다."""
+    _install_fake_playwright(monkeypatch, tmp_path, usage_payload={})
+    with pytest.raises(Exception) as exc_info:
+        fetcher.fetch_usage()
+    assert not isinstance(exc_info.value, fetcher.SessionExpiredError), "형식 오류로 로그인 창이 뜨면 안 된다"
+
+
+def test_limits_only_response_fills_tray_numbers_from_limits(tmp_path, monkeypatch):
+    payload = {
+        "limits": [
+            {"kind": "session", "percent": 30, "resets_at": None},
+            {"kind": "weekly_all", "percent": 50, "resets_at": None},
+        ]
+    }
+    _install_fake_playwright(monkeypatch, tmp_path, usage_payload=payload)
+    usage = fetcher.fetch_usage()
+    assert (usage.session_percent, usage.week_percent) == (30, 50)
