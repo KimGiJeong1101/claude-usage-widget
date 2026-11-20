@@ -822,6 +822,12 @@ def _focus_or_create(key: str, create: Callable[[], webview.Window]) -> None:
         _bring_to_foreground(existing)
 
 
+# 열려 있는 사용량 팝업을 열 때 정한 언어. 팝업의 나머지 글자(제목, 리셋 문구 등)는
+# 다시 열어야 언어가 바뀌는데, 자동 갱신만 설정의 새 언어를 쓰면 한도 이름만 바뀌어
+# 한 화면에 두 언어가 섞였다.
+_usage_popup_lang = i18n.DEFAULT_LANGUAGE
+
+
 def push_usage_update(usage: UsageData) -> None:
     """main.py가 백그라운드에서 사용량을 새로 가져오는 데 성공할 때마다
     호출한다. 이미 열려있는 사용량 팝업이 있으면 그 자리에서 바로 반영해서,
@@ -830,8 +836,7 @@ def push_usage_update(usage: UsageData) -> None:
         window = _singleton_windows.get("usage")
     if window is None:
         return
-    lang = Config.load().language
-    data = json.dumps(_usage_to_dict(usage, lang))
+    data = json.dumps(_usage_to_dict(usage, _usage_popup_lang))
     try:
         window.evaluate_js(f"window.__pushUsage && window.__pushUsage({data})")
     except Exception:
@@ -866,6 +871,7 @@ def show_usage_popup(
     실행해주기 때문이다."""
 
     def create() -> webview.Window:
+        global _usage_popup_lang
         box: list = []
         # 높이는 한도 개수(보통 2~3개)에 맞춰 정한다 -- 예전에는 링 게이지
         # 카드 두 개 고정이라 360x340이었는데, 한도가 3개 이상인 계정에서는
@@ -875,6 +881,7 @@ def show_usage_popup(
         config = Config.load()
         opacity = config.usage_popup_opacity
         lang = config.language
+        _usage_popup_lang = lang
         opacity_fn = _box_opacity_setter(box)
         x, y, grow_upward = _position_near_tray(width, height)
         api = _UsageApi(
